@@ -1,0 +1,52 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bubbleGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FF5B5B"/>
+      <stop offset="100%" stop-color="#E22E2E"/>
+    </linearGradient>
+    <radialGradient id="softShadow2" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#C42B2B" stop-opacity="0.30"/>
+      <stop offset="100%" stop-color="#C42B2B" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- ground shadow -->
+  <ellipse cx="256" cy="420" rx="140" ry="24" fill="url(#softShadow2)"/>
+
+  <!-- chat bubble body -->
+  <path d="
+    M256 76
+    C 356 76 424 142 424 226
+    C 424 310 356 368 256 368
+    C 226 368 198 362 174 350
+    L 108 378
+    L 132 316
+    C 100 288 88 258 88 226
+    C 88 142 156 76 256 76
+    Z"
+    fill="url(#bubbleGrad)"/>
+
+  <!-- inner highlight -->
+  <path d="M256 76 C 356 76 424 142 424 226 C 424 234 423 242 422 250
+    C 414 172 350 112 262 108 Z" fill="#FFFFFF" opacity="0.12"/>
+
+  <!-- star (gợi cờ Việt Nam) -->
+  <path d="
+    M256 150
+    L 268 188
+    L 308 188
+    L 276 211
+    L 288 249
+    L 256 226
+    L 224 249
+    L 236 211
+    L 204 188
+    L 244 188
+    Z"
+    fill="#FFD447"/>
+
+  <!-- three dots (typing indicator) -->
+  <circle cx="196" cy="288" r="12" fill="#FFFFFF"/>
+  <circle cx="256" cy="288" r="12" fill="#FFFFFF"/>
+  <circle cx="316" cy="288" r="12" fill="#FFFFFF"/>
+</svg>
