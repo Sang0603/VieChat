@@ -7,6 +7,8 @@ import UserAvatar from "./UserAvatar";
 import StatusBadge from "./StatusBadge";
 import GroupChatAvatar from "./GroupChatAvatar";
 import { useSocketStore } from "@/stores/useSocketStore";
+import CallButton from "../call/CallButton";
+import VideoCallButton from "../call/VideoCallButton";
 
 const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
   const { conversations, activeConversationId } = useChatStore();
@@ -35,12 +37,6 @@ const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
   return (
     <header className="sticky top-0 z-10 px-4 py-2 flex items-center bg-background">
       <div className="flex items-center gap-2 w-full">
-        <SidebarTrigger className="-ml-1 text-foreground" />
-        <Separator
-          orientation="vertical"
-          className="mr-2 data-[orientation=vertical]:h-4"
-        />
-
         <div className="p-2 w-full flex items-center gap-3">
           {/* avatar */}
           <div className="relative">
@@ -70,6 +66,31 @@ const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
           <h2 className="font-semibold text-foreground">
             {chat.type === "direct" ? otherUser?.displayName : chat.group?.name}
           </h2>
+
+          {/* nút gọi thoại + gọi video + nút mở panel - chỉ hiện với chat 1-1, chưa hỗ trợ gọi nhóm */}
+          <div className="ml-auto flex items-center gap-1">
+            {chat.type === "direct" && otherUser && (
+              <>
+                <CallButton
+                  targetUserId={otherUser._id}
+                  targetUserName={otherUser.displayName}
+                  targetUserAvatar={otherUser.avatarUrl}
+                  conversationId={chat._id}
+                />
+                <VideoCallButton
+                  targetUserId={otherUser._id}
+                  targetUserName={otherUser.displayName}
+                  targetUserAvatar={otherUser.avatarUrl}
+                  conversationId={chat._id}
+                />
+              </>
+            )}
+            <Separator
+              orientation="vertical"
+              className="mx-1 data-[orientation=vertical]:h-4"
+            />
+            <SidebarTrigger className="text-foreground" />
+          </div>
         </div>
       </div>
     </header>

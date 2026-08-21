@@ -3,6 +3,7 @@ import http from "http";
 import express from "express";
 import { socketAuthMiddleware } from "../middlewares/socketMiddleware.js";
 import { getUserConversationsForSocketIO } from "../controllers/conversationController.js";
+import { registerCallHandlers } from "./callSocketHandlers.js"; // 👈 mới thêm
 
 const app = express();
 
@@ -24,7 +25,9 @@ io.on("connection", async (socket) => {
 
   // console.log(`${user.displayName} online với socket ${socket.id}`);
 
-  onlineUsers.set(user._id, socket.id);
+  // 👇 ĐỔI: dùng .toString() để key luôn là string, khớp với cách
+  // callSocketHandlers.js lookup userSocketMap.get(toUserId) bằng string
+  onlineUsers.set(user._id.toString(), socket.id);
 
   io.emit("online-users", Array.from(onlineUsers.keys()));
 
@@ -39,8 +42,12 @@ io.on("connection", async (socket) => {
 
   socket.join(user._id.toString());
 
+  // 👇 mới thêm: đăng ký toàn bộ event liên quan tới gọi thoại
+  registerCallHandlers(io, socket, onlineUsers);
+
   socket.on("disconnect", () => {
-    onlineUsers.delete(user._id);
+    // 👇 ĐỔI: .toString() cho khớp với dòng set ở trên
+    onlineUsers.delete(user._id.toString());
     io.emit("online-users", Array.from(onlineUsers.keys()));
     /* console.log(`socket disconnected: ${socket.id}`); */
   });

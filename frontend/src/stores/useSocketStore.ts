@@ -4,6 +4,7 @@ import { useAuthStore } from "./useAuthStore";
 import type { SocketState } from "@/types/store";
 import { useChatStore } from "./useChatStore";
 import { useFriendStore } from "./useFriendStore";
+import { useCallStore } from "./useCallStore"; // 👈 mới thêm
 
 const baseURL = import.meta.env.VITE_SOCKET_URL;
 
@@ -102,6 +103,17 @@ export const useSocketStore = create<SocketState>((set, get) => ({
     socket.on("conversation-created", ({ conversation }) => {
       useChatStore.getState().addConvo(conversation);
       socket.emit("join-conversation", conversation._id);
+    });
+
+    // 👇 MỚI THÊM: có người gọi thoại đến -> đẩy vào useCallStore để
+    // IncomingCallModal tự hiện popup (xem components/call/IncomingCallModal.tsx)
+    socket.on("call:incoming", ({ callId, fromUser, callType, conversationId }) => {
+      useCallStore.getState().receiveIncomingCall({
+        callId,
+        conversationId,
+        peer: fromUser,
+        callType,
+      });
     });
   },
   disconnectSocket: () => {

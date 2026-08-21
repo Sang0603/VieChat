@@ -20,6 +20,25 @@ const messageSchema = new mongoose.Schema(
     imgUrl: {
       type: String,
     },
+    // "text" (mặc định, tin nhắn thường) | "call" (log cuộc gọi)
+    type: {
+      type: String,
+      enum: ["text", "call"],
+      default: "text",
+    },
+    // chỉ có giá trị khi type = "call"
+    callInfo: {
+      callId: { type: String },
+      callType: { type: String, enum: ["audio", "video"] },
+      status: {
+        type: String,
+        enum: ["completed", "missed", "rejected", "cancelled"],
+      },
+      // luôn là người bấm gọi (trùng với senderId của message này)
+      callerId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      calleeId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      durationInSeconds: { type: Number, default: 0 },
+    },
   },
   {
     timestamps: true,

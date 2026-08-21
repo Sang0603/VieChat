@@ -3,6 +3,8 @@ import type { Conversation, Message, Participant } from "@/types/chat";
 import UserAvatar from "./UserAvatar";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
+import { PhoneIncoming, PhoneMissed, PhoneOutgoing } from "lucide-react";
+import { useStartCall } from "@/hooks/useStartCall";
 
 interface MessageItemProps {
   message: Message;
@@ -10,6 +12,35 @@ interface MessageItemProps {
   messages: Message[];
   selectedConvo: Conversation;
   lastMessageStatus: "delivered" | "seen";
+}
+
+function getCallLabel(message: Message, isOwn: boolean) {
+  const info = message.callInfo;
+  if (!info) return { title: "", subtitle: "" };
+
+  const callTypeLabel = info.callType === "video" ? "Cuộc gọi video" : "Cuộc gọi thoại";
+
+  if (info.status === "completed") {
+    const m = Math.floor(info.durationInSeconds / 60);
+    const s = info.durationInSeconds % 60;
+    return {
+      title: isOwn ? `${callTypeLabel} đi` : `${callTypeLabel} đến`,
+      subtitle: `${m} phút ${s} giây`,
+    };
+  }
+
+  if (info.status === "missed" || info.status === "cancelled") {
+    return {
+      title: isOwn ? "Bạn đã hủy" : "Cuộc gọi nhỡ",
+      subtitle: callTypeLabel,
+    };
+  }
+
+  // rejected
+  return {
+    title: isOwn ? "Cuộc gọi bị từ chối" : "Bạn đã từ chối",
+    subtitle: callTypeLabel,
+  };
 }
 
 const MessageItem = ({
@@ -32,6 +63,97 @@ const MessageItem = ({
   const participant = selectedConvo.participants.find(
     (p: Participant) => p._id.toString() === message.senderId.toString()
   );
+
+  const isCallMessage = message.type === "call" && !!message.callInfo;
+
+  // người để "Gọi lại": luôn là đối phương trong cuộc trò chuyện này
+  const otherParticipant = selectedConvo.participants.find(
+    (p: Participant) => p._id.toString() !== message.senderId.toString()
+  );
+
+  const { startCall, canCall } = useStartCall(selectedConvo._id);
+
+  if (isCallMessage) {
+    const info = message.callInfo!;
+    const isOwn = !!message.isOwn;
+    const { title, subtitle } = getCallLabel(message, isOwn);
+
+    const isMissedOrCancelled = info.status === "missed" || info.status === "cancelled";
+    const isRejected = info.status === "rejected";
+    const isIncomingLine = !isOwn; // hướng của icon điện thoại nhỏ (đến/đi)
+
+    // icon dòng thời lượng - chỉ icon đổi màu theo trạng thái, chữ giữ màu mặc định
+    const LineIcon = isMissedOrCancelled || isRejected
+      ? PhoneMissed
+      : isIncomingLine
+      ? PhoneIncoming
+      : PhoneOutgoing;
+
+    const lineColorClass =
+      isMissedOrCancelled || isRejected ? "text-red-500" : "text-emerald-500";
+
+    return (
+      <>
+        {isShowTime && (
+          <span className="flex justify-center text-xs text-muted-foreground px-1">
+            {formatMessageTime(new Date(message.createdAt))}
+          </span>
+        )}
+
+        <div
+          className={cn(
+            "flex gap-2 message-bounce mt-1",
+            message.isOwn ? "justify-end" : "justify-start"
+          )}
+        >
+          {!message.isOwn && (
+            <div className="w-8">
+              {isGroupBreak && (
+                <UserAvatar
+                  type="chat"
+                  name={participant?.displayName ?? "Moji"}
+                  avatarUrl={participant?.avatarUrl ?? undefined}
+                />
+              )}
+            </div>
+          )}
+
+          <Card className="w-44 space-y-2 p-3 bg-background border">
+            <div className="text-foreground">
+              <span className="text-sm font-medium leading-tight">{title}</span>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <LineIcon className={cn("size-3.5 shrink-0", lineColorClass)} />
+              <span className="text-xs leading-tight text-muted-foreground">{subtitle}</span>
+            </div>
+
+            {otherParticipant && (
+              <>
+                <div className="h-px bg-border" />
+                <button
+                  disabled={!canCall}
+                  onClick={() =>
+                    startCall(
+                      {
+                        _id: otherParticipant._id,
+                        displayName: otherParticipant.displayName,
+                        avatarUrl: otherParticipant.avatarUrl,
+                      },
+                      info.callType
+                    )
+                  }
+                  className="w-full text-center text-xs font-medium text-blue-500 hover:text-blue-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Gọi lại
+                </button>
+              </>
+            )}
+          </Card>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>

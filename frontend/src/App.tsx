@@ -8,11 +8,15 @@ import { useThemeStore } from "./stores/useThemeStore";
 import { useEffect } from "react";
 import { useAuthStore } from "./stores/useAuthStore";
 import { useSocketStore } from "./stores/useSocketStore";
+import { useCallStore } from "./stores/useCallStore"; // 👈 mới thêm
+import CallWindow from "./components/call/CallWindow"; // 👈 mới thêm
+import IncomingCallModal from "./components/call/IncomingCallModal"; // 👈 mới thêm
 
 function App() {
   const { isDark, setTheme } = useThemeStore();
   const { accessToken } = useAuthStore();
-  const { connectSocket, disconnectSocket } = useSocketStore();
+  const { connectSocket, disconnectSocket, socket } = useSocketStore(); // 👈 lấy thêm socket
+  const { callId, endCall, setConnecting } = useCallStore(); // 👈 mới thêm
 
   useEffect(() => {
     setTheme(isDark);
@@ -25,6 +29,19 @@ function App() {
 
     return () => disconnectSocket();
   }, [accessToken]);
+
+  // 👇 mới thêm: xử lý khi user bấm Chấp nhận / Từ chối trên IncomingCallModal
+  const handleAcceptCall = () => {
+    if (!socket || !callId) return;
+    socket.emit("call:accept", { callId });
+    setConnecting();
+  };
+
+  const handleRejectCall = () => {
+    if (!socket || !callId) return;
+    socket.emit("call:reject", { callId, reason: "rejected" });
+    endCall();
+  };
 
   return (
     <>
@@ -50,6 +67,10 @@ function App() {
           </Route>
         </Routes>
       </BrowserRouter>
+
+      {/* 👇 mới thêm: đặt ngoài cùng để hiện được bất kể đang ở trang nào */}
+      <IncomingCallModal onAccept={handleAcceptCall} onReject={handleRejectCall} />
+      <CallWindow />
     </>
   );
 }

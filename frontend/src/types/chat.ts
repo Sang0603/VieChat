@@ -44,6 +44,15 @@ export interface ConversationResponse {
   conversations: Conversation[];
 }
 
+export interface CallInfo {
+  callId: string;
+  callType: "audio" | "video";
+  status: "completed" | "missed" | "rejected" | "cancelled";
+  callerId: string;
+  calleeId: string;
+  durationInSeconds: number;
+}
+
 export interface Message {
   _id: string;
   conversationId: string;
@@ -53,4 +62,7 @@ export interface Message {
   updatedAt?: string | null;
   createdAt: string;
   isOwn?: boolean;
+  // "text" (mặc định) | "call" (log cuộc gọi, hiện dạng thẻ trong khung chat)
+  type?: "text" | "call";
+  callInfo?: CallInfo;
 }
