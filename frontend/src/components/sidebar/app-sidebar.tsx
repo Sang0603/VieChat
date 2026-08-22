@@ -5,10 +5,8 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
-  SidebarGroupAction,
   SidebarGroupContent,
   SidebarGroupLabel,
-  SidebarMenu,
 } from "@/components/ui/sidebar";
 import SidebarSearchBar from "../chat/SidebarSearchBar";
 import GroupChatList from "../chat/GroupChatList";
