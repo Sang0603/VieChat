@@ -32,6 +32,8 @@ interface UseWebRTCParams {
 export function useWebRTC({ onIceCandidate, callType = "audio" }: UseWebRTCParams) {
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  // hàng đợi các ICE candidate đến trước khi remoteDescription sẵn sàng
+  const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
 
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
@@ -89,6 +91,27 @@ export function useWebRTC({ onIceCandidate, callType = "audio" }: UseWebRTCParam
     return pc;
   }, [callType, onIceCandidate]);
 
+  // sau khi setRemoteDescription xong, thêm hết các candidate đang xếp hàng
+  const flushPendingCandidates = useCallback(async (pc: RTCPeerConnection) => {
+    if (pendingCandidatesRef.current.length === 0) return;
+
+    console.log(
+      `[WebRTC] flush ${pendingCandidatesRef.current.length} ICE candidate đang chờ`
+    );
+
+    const queued = pendingCandidatesRef.current;
+    pendingCandidatesRef.current = [];
+
+    for (const candidate of queued) {
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        console.log("[WebRTC] đã thêm ICE candidate (từ hàng đợi)");
+      } catch (err) {
+        console.error("[WebRTC] Lỗi khi thêm ICE candidate (từ hàng đợi):", err);
+      }
+    }
+  }, []);
+
   const createOffer = useCallback(async () => {
     console.log("[WebRTC] createOffer() được gọi");
     const pc = pcRef.current ?? (await initConnection());
@@ -103,24 +126,31 @@ export function useWebRTC({ onIceCandidate, callType = "audio" }: UseWebRTCParam
       console.log("[WebRTC] createAnswer() được gọi với offer:", offer.type);
       const pc = pcRef.current ?? (await initConnection());
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      await flushPendingCandidates(pc);
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       console.log("[WebRTC] đã tạo answer:", answer.type);
       return answer;
     },
-    [initConnection]
+    [initConnection, flushPendingCandidates]
   );
 
-  const acceptAnswer = useCallback(async (answer: RTCSessionDescriptionInit) => {
-    console.log("[WebRTC] acceptAnswer() được gọi");
-    const pc = pcRef.current;
-    if (!pc) {
-      console.error("[WebRTC] acceptAnswer LỖI: pcRef.current là null (chưa từng createOffer?)");
-      return;
-    }
-    await pc.setRemoteDescription(new RTCSessionDescription(answer));
-    console.log("[WebRTC] đã set remote description (answer)");
-  }, []);
+  const acceptAnswer = useCallback(
+    async (answer: RTCSessionDescriptionInit) => {
+      console.log("[WebRTC] acceptAnswer() được gọi");
+      const pc = pcRef.current;
+      if (!pc) {
+        console.error(
+          "[WebRTC] acceptAnswer LỖI: pcRef.current là null (chưa từng createOffer?)"
+        );
+        return;
+      }
+      await pc.setRemoteDescription(new RTCSessionDescription(answer));
+      await flushPendingCandidates(pc);
+      console.log("[WebRTC] đã set remote description (answer)");
+    },
+    [flushPendingCandidates]
+  );
 
   const addIceCandidate = useCallback(async (candidate: RTCIceCandidateInit) => {
     const pc = pcRef.current;
@@ -128,6 +158,14 @@ export function useWebRTC({ onIceCandidate, callType = "audio" }: UseWebRTCParam
       console.warn("[WebRTC] addIceCandidate: pcRef.current chưa tồn tại, bỏ qua candidate này");
       return;
     }
+
+    // remoteDescription chưa sẵn sàng -> xếp hàng, thêm sau khi setRemoteDescription xong
+    if (!pc.remoteDescription) {
+      console.log("[WebRTC] remoteDescription chưa sẵn sàng, xếp candidate vào hàng đợi");
+      pendingCandidatesRef.current.push(candidate);
+      return;
+    }
+
     try {
       await pc.addIceCandidate(new RTCIceCandidate(candidate));
       console.log("[WebRTC] đã thêm ICE candidate từ đối phương");
@@ -156,6 +194,7 @@ export function useWebRTC({ onIceCandidate, callType = "audio" }: UseWebRTCParam
     localStreamRef.current = null;
     pcRef.current?.close();
     pcRef.current = null;
+    pendingCandidatesRef.current = [];
     setRemoteStream(null);
     setLocalStream(null);
     setConnectionState("new");
