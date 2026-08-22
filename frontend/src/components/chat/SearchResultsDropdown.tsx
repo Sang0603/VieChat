@@ -28,31 +28,30 @@ const SearchResultsDropdown = ({ search, onSelect }: SearchResultsDropdownProps)
   const query = search.trim().toLowerCase();
 
   const results: SearchResultItem[] = conversations
-    .map((convo) => {
+    .flatMap((convo) => {
       if (convo.type === "direct") {
         const otherUser = convo.participants.find((p) => p._id !== user._id);
-        if (!otherUser) return null;
+        if (!otherUser) return [];
 
-        return {
+        return [{
           id: convo._id,
           name: otherUser.displayName ?? "",
           avatarUrl: otherUser.avatarUrl,
           isGroup: false,
           participants: convo.participants,
           lastMessage: convo.lastMessage?.content ?? "",
-        };
+        }];
       }
 
-      return {
+      return [{
         id: convo._id,
         name: convo.group?.name ?? "",
         avatarUrl: undefined,
         isGroup: true,
         participants: convo.participants,
         lastMessage: convo.lastMessage?.content ?? "",
-      };
+      }];
     })
-    .filter((item): item is SearchResultItem => !!item)
     .filter((item) => item.name.toLowerCase().includes(query));
 
   const handleSelect = async (id: string) => {
