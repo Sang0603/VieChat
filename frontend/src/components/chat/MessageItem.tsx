@@ -201,7 +201,7 @@ const MessageItem = ({
                 src={message.imgUrl}
                 alt="Ảnh đã gửi"
                 className="rounded-md max-w-full max-h-80 object-cover cursor-pointer"
-                onClick={() => window.open(message.imgUrl, "_blank")}
+                onClick={() => window.open(message.imgUrl ?? undefined, "_blank")}
               />
               {message.content && (
                 <p className="text-sm leading-relaxed break-words px-2 pt-2 pb-1">
