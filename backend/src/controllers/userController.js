@@ -104,3 +104,33 @@ export const changePassword = async (req, res) => {
     return res.status(500).json({ message: "Lỗi hệ thống" });
   }
 };
+
+export const updateProfile = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { displayName, phone, bio } = req.body;
+
+    const updateData = {};
+    if (displayName !== undefined) updateData.displayName = displayName;
+    if (phone !== undefined) updateData.phone = phone;
+    if (bio !== undefined) updateData.bio = bio;
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ message: "Không có dữ liệu để cập nhật" });
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(userId, updateData, {
+      new: true,
+      runValidators: true,
+    });
+
+    if (!updatedUser) {
+      return res.status(404).json({ message: "Không tìm thấy người dùng" });
+    }
+
+    return res.status(200).json({ user: updatedUser });
+  } catch (error) {
+    console.error("Lỗi xảy ra khi updateProfile", error);
+    return res.status(500).json({ message: "Lỗi hệ thống" });
+  }
+};

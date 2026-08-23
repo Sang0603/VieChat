@@ -24,4 +24,25 @@ export const useUserStore = create<UserState>((_set, _get) => ({
       toast.error("Upload avatar không thành công!");
     }
   },
+
+  updateProfile: async (payload) => {
+    try {
+      const { user, setUser } = useAuthStore.getState();
+      const data = await userService.updateProfile(payload);
+
+      if (user) {
+        setUser({
+          ...user,
+          ...data.user,
+        });
+      }
+
+      toast.success("Cập nhật thông tin thành công!");
+      return true;
+    } catch (error) {
+      console.error("Lỗi khi updateProfile", error);
+      toast.error("Cập nhật thông tin không thành công!");
+      return false;
+    }
+  },
 }));

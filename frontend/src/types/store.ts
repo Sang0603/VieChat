@@ -1,6 +1,7 @@
 import type { Socket } from "socket.io-client";
 import type { Conversation, Message } from "./chat";
 import type { Friend, FriendRequest, User } from "./user";
+import type { UpdateProfilePayload } from "@/services/userService";
 
 export interface AuthState {
   accessToken: string | null;
@@ -31,7 +32,7 @@ export interface ThemeState {
 
 export interface ChatState {
   conversations: Conversation[];
-  messages: Record<
+  messages: Record
     string,
     {
       items: Message[];
@@ -105,4 +106,5 @@ export interface FriendState {
 
 export interface UserState {
   updateAvatarUrl: (formData: FormData) => Promise<void>;
+  updateProfile: (payload: UpdateProfilePayload) => Promise<boolean>;
 }
