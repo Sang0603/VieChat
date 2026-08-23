@@ -29,7 +29,7 @@ export const signUp = async (req, res) => {
     }
 
     // kiểm tra username tồn tại chưa
-    const duplicate = await User.findOne({ username });
+    const duplicate = await User.findOne({ username: username.toLowerCase().trim() });
 
     if (duplicate) {
       return res.status(409).json({ message: "username đã tồn tại" });
@@ -64,7 +64,7 @@ export const signIn = async (req, res) => {
     }
 
     // lấy hashedPassword trong db để so với password input
-    const user = await User.findOne({ username });
+    const user = await User.findOne({ username: username.toLowerCase().trim() });
 
     if (!user) {
       return res
