@@ -32,14 +32,7 @@ export interface ThemeState {
 
 export interface ChatState {
   conversations: Conversation[];
-  messages: Record
-    string,
-    {
-      items: Message[];
-      hasMore: boolean; // infinite-scroll
-      nextCursor?: string | null; // phân trang
-    }
-  >;
+  messages: Record<string, { items: Message[]; hasMore: boolean; nextCursor?: string | null }>;
   activeConversationId: string | null;
   convoLoading: boolean;
   messageLoading: boolean;

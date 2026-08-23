@@ -1,9 +1,7 @@
 import api from "@/lib/axios";
 import type { User } from "@/types/user";
 
-export type UpdateProfilePayload = Partial
-  Pick<User, "displayName" | "phone" | "bio">
->;
+export type UpdateProfilePayload = Partial<Pick<User, "displayName" | "phone" | "bio">>;
 
 export const userService = {
   uploadAvatar: async (formData: FormData) => {
