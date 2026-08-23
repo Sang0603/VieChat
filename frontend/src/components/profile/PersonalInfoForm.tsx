@@ -9,7 +9,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
 import type { User } from "@/types/user";
 
 type EditableField = {
@@ -40,7 +39,7 @@ const PersonalInfoForm = ({ userInfo }: Props) => {
           Thông tin cá nhân
         </CardTitle>
         <CardDescription>
-          Cập nhật chi tiết cá nhân và thông tin hồ sơ của bạn
+          Thông tin cá nhân và hồ sơ của bạn
         </CardDescription>
       </CardHeader>
 
@@ -56,8 +55,8 @@ const PersonalInfoForm = ({ userInfo }: Props) => {
                 id={key}
                 type={type ?? "text"}
                 value={userInfo[key] ?? ""}
-                onChange={() => {}}
-                className="glass-light border-border/30"
+                readOnly
+                className="glass-light border-border/30 cursor-default"
               />
             </div>
           ))}
@@ -69,14 +68,10 @@ const PersonalInfoForm = ({ userInfo }: Props) => {
             id="bio"
             rows={3}
             value={userInfo.bio ?? ""}
-            onChange={() => {}}
-            className="glass-light border-border/30 resize-none"
+            readOnly
+            className="glass-light border-border/30 resize-none cursor-default"
           />
         </div>
-
-        <Button className="w-full md:w-auto bg-gradient-primary hover:opacity-90 transition-opacity">
-          Lưu thay đổi
-        </Button>
       </CardContent>
     </Card>
   );

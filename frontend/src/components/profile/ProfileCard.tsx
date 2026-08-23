@@ -14,10 +14,6 @@ const ProfileCard = ({ user }: ProfileCardProps) => {
   const { onlineUsers } = useSocketStore();
   if (!user) return;
 
-  if (!user.bio) {
-    user.bio = "Will code for food 💻";
-  }
-
   const isOnline = onlineUsers.includes(user._id) ? true : false;
 
   return (
