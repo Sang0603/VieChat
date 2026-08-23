@@ -11,12 +11,20 @@ import { useAuthStore } from "@/stores/useAuthStore";
 import { useNavigate } from "react-router";
 import { Eye, EyeOff } from "lucide-react";
 
+const passwordSchema = z
+  .string()
+  .min(8, "Mật khẩu phải có ít nhất 8 ký tự")
+  .regex(/[a-z]/, "Mật khẩu phải có ít nhất 1 chữ thường")
+  .regex(/[A-Z]/, "Mật khẩu phải có ít nhất 1 chữ hoa")
+  .regex(/[0-9]/, "Mật khẩu phải có ít nhất 1 chữ số")
+  .regex(/[^a-zA-Z0-9]/, "Mật khẩu phải có ít nhất 1 ký tự đặc biệt (!@#$%...)");
+
 const signUpSchema = z.object({
   firstname: z.string().min(1, "Tên bắt buộc phải có"),
   lastname: z.string().min(1, "Họ bắt buộc phải có"),
   username: z.string().min(3, "Tên đăng nhập phải có ít nhất 3 ký tự"),
   email: z.email("Email không hợp lệ"),
-  password: z.string().min(6, "Mật khẩu phải có ít nhất 6 ký tự"),
+  password: passwordSchema,
 });
 
 type SignUpFormValues = z.infer<typeof signUpSchema>;

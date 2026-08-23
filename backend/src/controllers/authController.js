@@ -18,6 +18,16 @@ export const signUp = async (req, res) => {
       });
     }
 
+    // kiểm tra mật khẩu mạnh (bắt buộc, tránh bị bypass qua API trực tiếp)
+    const strongPasswordRegex =
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^a-zA-Z0-9]).{8,}$/;
+    if (!strongPasswordRegex.test(password)) {
+      return res.status(400).json({
+        message:
+          "Mật khẩu phải có ít nhất 8 ký tự, gồm chữ hoa, chữ thường, số và ký tự đặc biệt.",
+      });
+    }
+
     // kiểm tra username tồn tại chưa
     const duplicate = await User.findOne({ username });
 
