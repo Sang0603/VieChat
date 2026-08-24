@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useChatStore } from "@/stores/useChatStore";
 import type { Conversation } from "@/types/chat";
 import { SidebarTrigger } from "../ui/sidebar";
@@ -9,11 +10,13 @@ import GroupChatAvatar from "./GroupChatAvatar";
 import { useSocketStore } from "@/stores/useSocketStore";
 import CallButton from "../call/CallButton";
 import VideoCallButton from "../call/VideoCallButton";
+import FriendProfileDialog from "./FriendProfileDialog";
 
 const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
   const { conversations, activeConversationId } = useChatStore();
   const { user } = useAuthStore();
   const { onlineUsers } = useSocketStore();
+  const [profileOpen, setProfileOpen] = useState(false);
 
   let otherUser;
 
@@ -37,7 +40,16 @@ const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
   return (
     <header className="sticky top-0 z-10 px-4 py-2 flex items-center bg-background">
       <div className="flex items-center gap-2 w-full">
-        <div className="p-2 w-full flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => {
+            if (chat?.type === "direct" && otherUser) setProfileOpen(true);
+          }}
+          disabled={chat.type !== "direct"}
+          className={`flex items-center gap-3 min-w-0 ${
+            chat.type === "direct" ? "cursor-pointer" : "cursor-default"
+          }`}
+        >
           {/* avatar */}
           <div className="relative">
             {chat.type === "direct" ? (
@@ -63,36 +75,48 @@ const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
           </div>
 
           {/* name */}
-          <h2 className="font-semibold text-foreground">
+          <h2 className="font-semibold text-foreground truncate">
             {chat.type === "direct" ? otherUser?.displayName : chat.group?.name}
           </h2>
+        </button>
 
-          {/* nút gọi thoại + gọi video + nút mở panel - chỉ hiện với chat 1-1, chưa hỗ trợ gọi nhóm */}
-          <div className="ml-auto flex items-center gap-1">
-            {chat.type === "direct" && otherUser && (
-              <>
-                <CallButton
-                  targetUserId={otherUser._id}
-                  targetUserName={otherUser.displayName}
-                  targetUserAvatar={otherUser.avatarUrl}
-                  conversationId={chat._id}
-                />
-                <VideoCallButton
-                  targetUserId={otherUser._id}
-                  targetUserName={otherUser.displayName}
-                  targetUserAvatar={otherUser.avatarUrl}
-                  conversationId={chat._id}
-                />
-              </>
-            )}
-            <Separator
-              orientation="vertical"
-              className="mx-1 data-[orientation=vertical]:h-4"
-            />
-            <SidebarTrigger className="text-foreground" />
-          </div>
+        {/* nút gọi thoại + gọi video + nút mở panel - chỉ hiện với chat 1-1, chưa hỗ trợ gọi nhóm */}
+        <div className="ml-auto flex items-center gap-1">
+          {chat.type === "direct" && otherUser && (
+            <>
+              <CallButton
+                targetUserId={otherUser._id}
+                targetUserName={otherUser.displayName}
+                targetUserAvatar={otherUser.avatarUrl}
+                conversationId={chat._id}
+              />
+              <VideoCallButton
+                targetUserId={otherUser._id}
+                targetUserName={otherUser.displayName}
+                targetUserAvatar={otherUser.avatarUrl}
+                conversationId={chat._id}
+              />
+            </>
+          )}
+          <Separator
+            orientation="vertical"
+            className="mx-1 data-[orientation=vertical]:h-4"
+          />
+          <SidebarTrigger className="text-foreground" />
         </div>
       </div>
+
+      {chat.type === "direct" && otherUser && (
+        <FriendProfileDialog
+          open={profileOpen}
+          onOpenChange={setProfileOpen}
+          friend={{
+            id: otherUser._id,
+            fullName: otherUser.displayName,
+            avatarUrl: otherUser.avatarUrl || undefined,
+          }}
+        />
+      )}
     </header>
   );
 };
