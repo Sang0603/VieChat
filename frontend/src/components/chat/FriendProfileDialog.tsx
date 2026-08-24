@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { X, Phone, MessageCircle, Ban, Trash2, ChevronRight } from "lucide-react";
+import { X, Phone, MessageCircle, Ban, Trash2 } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
