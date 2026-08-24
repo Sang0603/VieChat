@@ -18,7 +18,7 @@ const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
   const { onlineUsers } = useSocketStore();
   const [profileOpen, setProfileOpen] = useState(false);
 
-  let otherUser;
+  let otherUser: Conversation["participants"][number] | null | undefined;
 
   chat = chat ?? conversations.find((c) => c._id === activeConversationId);
 
