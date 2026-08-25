@@ -48,10 +48,9 @@ function getCallLabel(message: Message, isOwn: boolean) {
   };
 }
 
-// 👇 SỬA: gộp nút like nhỏ + thanh emoji picker vào 1 khối duy nhất
-// để hover không bị "rớt" khi di chuột từ nút lên thanh emoji.
+// 👇 SỬA: nút like nhỏ giờ nằm ở góc DƯỚI - PHẢI bubble (theo ảnh mẫu),
+// thanh emoji vẫn bung lên phía TRÊN nút khi hover vào nút.
 const ReactionTrigger = ({
-  isOwn,
   myReaction,
   visible,
   showPicker,
@@ -74,10 +73,9 @@ const ReactionTrigger = ({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       className={cn(
-        "absolute -top-3 z-20 flex flex-col items-center",
+        "absolute -bottom-3 right-1 z-20 flex flex-col items-center",
         "transition-opacity",
-        visible || showPicker ? "opacity-100" : "opacity-0 pointer-events-none",
-        isOwn ? "right-1" : "left-1"
+        visible || showPicker ? "opacity-100" : "opacity-0 pointer-events-none"
       )}
     >
       {/* thanh emoji đầy đủ, bung lên phía trên nút */}
@@ -87,7 +85,7 @@ const ReactionTrigger = ({
           "transition-smooth origin-bottom",
           showPicker
             ? "opacity-100 scale-100 pointer-events-auto"
-            : "opacity-0 scale-90 pointer-events-none absolute bottom-full"
+            : "opacity-0 scale-90 pointer-events-none absolute bottom-full right-0"
         )}
       >
         {REACTION_EMOJIS.map((emoji) => (
@@ -105,7 +103,7 @@ const ReactionTrigger = ({
         ))}
       </div>
 
-      {/* nút like nhỏ - giống ảnh mẫu, đè nhẹ lên góc bubble */}
+      {/* nút like nhỏ - đè lên góc dưới-phải bubble, giống ảnh mẫu */}
       <button
         type="button"
         onClick={onQuickReact}
