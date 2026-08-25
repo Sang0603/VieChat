@@ -1,6 +1,6 @@
 import { chatService } from "@/services/chatService";
 import type { ChatState } from "@/types/store";
-import type { Conversation, MessageReaction, ReplyPreview } from "@/types/chat";
+import type { Conversation, ReplyPreview } from "@/types/chat";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { useAuthStore } from "./useAuthStore";
