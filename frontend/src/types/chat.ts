@@ -53,6 +53,15 @@ export interface CallInfo {
   durationInSeconds: number;
 }
 
+// bản rút gọn của tin nhắn gốc, dùng để hiển thị preview khi trả lời
+export interface ReplyPreview {
+  _id: string;
+  content: string | null;
+  imgUrl?: string | null;
+  senderId: string;
+  senderName?: string;
+}
+
 export interface Message {
   _id: string;
   conversationId: string;
@@ -65,4 +74,6 @@ export interface Message {
   // "text" (mặc định) | "call" (log cuộc gọi, hiện dạng thẻ trong khung chat)
   type?: "text" | "call";
   callInfo?: CallInfo;
+  // tin nhắn đang được trả lời (nếu có)
+  replyTo?: ReplyPreview | null;
 }

@@ -2,7 +2,7 @@ import { useAuthStore } from "@/stores/useAuthStore";
 import type { Conversation } from "@/types/chat";
 import { useRef, useState } from "react";
 import { Button } from "../ui/button";
-import { ImagePlus, Send, X, Loader2 } from "lucide-react";
+import { ImagePlus, Send, X, Loader2, Reply } from "lucide-react";
 import { Input } from "../ui/input";
 import EmojiPicker from "./EmojiPicker";
 import { useChatStore } from "@/stores/useChatStore";
@@ -13,7 +13,8 @@ const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB, khớp với giới hạn backen
 
 const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
   const { user } = useAuthStore();
-  const { sendDirectMessage, sendGroupMessage } = useChatStore();
+  const { sendDirectMessage, sendGroupMessage, replyingTo, clearReplyingTo } =
+    useChatStore();
   const [value, setValue] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -61,9 +62,11 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
     const currValue = trimmed;
     const currFile = imageFile;
     const currPreview = imagePreview;
+    const currReplyTo = replyingTo;
 
     setValue("");
     clearImage();
+    clearReplyingTo();
     setSending(true);
 
     try {
@@ -76,9 +79,19 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
       if (selectedConvo.type === "direct") {
         const participants = selectedConvo.participants;
         const otherUser = participants.filter((p) => p._id !== user._id)[0];
-        await sendDirectMessage(otherUser._id, currValue, imgUrl);
+        await sendDirectMessage(
+          otherUser._id,
+          currValue,
+          imgUrl,
+          currReplyTo?._id
+        );
       } else {
-        await sendGroupMessage(selectedConvo._id, currValue, imgUrl);
+        await sendGroupMessage(
+          selectedConvo._id,
+          currValue,
+          imgUrl,
+          currReplyTo?._id
+        );
       }
     } catch (error) {
       console.error(error);
@@ -88,6 +101,9 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
       if (currFile) {
         setImageFile(currFile);
         setImagePreview(currPreview);
+      }
+      if (currReplyTo) {
+        useChatStore.getState().setReplyingTo(currReplyTo);
       }
     } finally {
       setSending(false);
@@ -103,6 +119,34 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
 
   return (
     <div className="flex flex-col gap-2 p-3 min-h-[56px] bg-background">
+      {replyingTo && (
+        <div className="flex items-center gap-2 rounded-lg border border-border/50 bg-muted/50 px-3 py-2">
+          <Reply className="size-4 shrink-0 text-primary" />
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-medium text-primary">
+              Đang trả lời{" "}
+              {replyingTo.senderId === user._id
+                ? "chính mình"
+                : selectedConvo.participants.find(
+                    (p) => p._id === replyingTo.senderId
+                  )?.displayName ?? replyingTo.senderName ?? "tin nhắn"}
+            </p>
+            <p className="truncate text-xs text-muted-foreground">
+              {replyingTo.imgUrl && !replyingTo.content
+                ? "Đã gửi một ảnh"
+                : replyingTo.content}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={clearReplyingTo}
+            className="shrink-0 rounded-full p-1 hover:bg-destructive/10 transition-smooth"
+          >
+            <X className="size-3.5" />
+          </button>
+        </div>
+      )}
+
       {imagePreview && (
         <div className="relative w-fit">
           <img

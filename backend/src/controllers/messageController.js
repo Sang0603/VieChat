@@ -27,9 +27,32 @@ export const uploadChatImage = async (req, res) => {
   }
 };
 
+// gắn thông tin replyTo (đã populate gọn) vào message trả về cho client
+const attachReplyPreview = async (message) => {
+  await message.populate({
+    path: "replyTo",
+    select: "content imgUrl senderId",
+    populate: { path: "senderId", select: "displayName" },
+  });
+
+  const plain = message.toObject();
+
+  if (plain.replyTo) {
+    plain.replyTo = {
+      _id: plain.replyTo._id,
+      content: plain.replyTo.content,
+      imgUrl: plain.replyTo.imgUrl,
+      senderId: plain.replyTo.senderId?._id ?? plain.replyTo.senderId,
+      senderName: plain.replyTo.senderId?.displayName,
+    };
+  }
+
+  return plain;
+};
+
 export const sendDirectMessage = async (req, res) => {
   try {
-    const { recipientId, content, imgUrl, conversationId } = req.body;
+    const { recipientId, content, imgUrl, conversationId, replyTo } = req.body;
     const senderId = req.user._id;
 
     let conversation;
@@ -59,15 +82,18 @@ export const sendDirectMessage = async (req, res) => {
       senderId,
       content,
       imgUrl,
+      replyTo: replyTo || undefined,
     });
+
+    const formattedMessage = await attachReplyPreview(message);
 
     updateConversationAfterCreateMessage(conversation, message, senderId);
 
     await conversation.save();
 
-    emitNewMessage(io, conversation, message);
+    emitNewMessage(io, conversation, formattedMessage);
 
-    return res.status(201).json({ message });
+    return res.status(201).json({ message: formattedMessage });
   } catch (error) {
     console.error("Lỗi xảy ra khi gửi tin nhắn trực tiếp", error);
     return res.status(500).json({ message: "Lỗi hệ thống" });
@@ -76,7 +102,7 @@ export const sendDirectMessage = async (req, res) => {
 
 export const sendGroupMessage = async (req, res) => {
   try {
-    const { conversationId, content, imgUrl } = req.body;
+    const { conversationId, content, imgUrl, replyTo } = req.body;
     const senderId = req.user._id;
     const conversation = req.conversation;
 
@@ -89,14 +115,17 @@ export const sendGroupMessage = async (req, res) => {
       senderId,
       content,
       imgUrl,
+      replyTo: replyTo || undefined,
     });
+
+    const formattedMessage = await attachReplyPreview(message);
 
     updateConversationAfterCreateMessage(conversation, message, senderId);
 
     await conversation.save();
-    emitNewMessage(io, conversation, message);
+    emitNewMessage(io, conversation, formattedMessage);
 
-    return res.status(201).json({ message });
+    return res.status(201).json({ message: formattedMessage });
   } catch (error) {
     console.error("Lỗi xảy ra khi gửi tin nhắn nhóm", error);
     return res.status(500).json({ message: "Lỗi hệ thống" });

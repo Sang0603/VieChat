@@ -1,5 +1,5 @@
 import type { Socket } from "socket.io-client";
-import type { Conversation, Message } from "./chat";
+import type { Conversation, Message, ReplyPreview } from "./chat";
 import type { Friend, FriendRequest, User } from "./user";
 import type { UpdateProfilePayload } from "@/services/userService";
 
@@ -37,20 +37,26 @@ export interface ChatState {
   convoLoading: boolean;
   messageLoading: boolean;
   loading: boolean;
+  // tin nhắn đang được chọn để trả lời (hiện preview phía trên ô nhập)
+  replyingTo: ReplyPreview | null;
   reset: () => void;
 
   setActiveConversation: (id: string | null) => void;
+  setReplyingTo: (message: ReplyPreview | null) => void;
+  clearReplyingTo: () => void;
   fetchConversations: () => Promise<void>;
   fetchMessages: (conversationId?: string) => Promise<void>;
   sendDirectMessage: (
     recipientId: string,
     content: string,
-    imgUrl?: string
+    imgUrl?: string,
+    replyTo?: string
   ) => Promise<void>;
   sendGroupMessage: (
     conversationId: string,
     content: string,
-    imgUrl?: string
+    imgUrl?: string,
+    replyTo?: string
   ) => Promise<void>;
   // add message
   addMessage: (message: Message) => Promise<void>;

@@ -3,8 +3,9 @@ import type { Conversation, Message, Participant } from "@/types/chat";
 import UserAvatar from "./UserAvatar";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
-import { PhoneIncoming, PhoneMissed, PhoneOutgoing } from "lucide-react";
+import { PhoneIncoming, PhoneMissed, PhoneOutgoing, Reply } from "lucide-react";
 import { useStartCall } from "@/hooks/useStartCall";
+import { useChatStore } from "@/stores/useChatStore";
 
 interface MessageItemProps {
   message: Message;
@@ -50,6 +51,8 @@ const MessageItem = ({
   selectedConvo,
   lastMessageStatus,
 }: MessageItemProps) => {
+  const setReplyingTo = useChatStore((s) => s.setReplyingTo);
+
   const prev = index + 1 < messages.length ? messages[index + 1] : undefined;
 
   const isShowTime =
@@ -72,6 +75,16 @@ const MessageItem = ({
   );
 
   const { startCall, canCall } = useStartCall(selectedConvo._id);
+
+  const handleReplyClick = () => {
+    setReplyingTo({
+      _id: message._id,
+      content: message.content,
+      imgUrl: message.imgUrl,
+      senderId: message.senderId,
+      senderName: participant?.displayName,
+    });
+  };
 
   if (isCallMessage) {
     const info = message.callInfo!;
@@ -166,13 +179,13 @@ const MessageItem = ({
 
       <div
         className={cn(
-          "flex gap-2 message-bounce mt-1",
+          "group flex gap-2 message-bounce mt-1 items-center",
           message.isOwn ? "justify-end" : "justify-start"
         )}
       >
         {/* avatar */}
         {!message.isOwn && (
-          <div className="w-8">
+          <div className="w-8 self-end">
             {isGroupBreak && (
               <UserAvatar
                 type="chat"
@@ -183,6 +196,18 @@ const MessageItem = ({
           </div>
         )}
 
+        {/* nút trả lời - chỉ hiện khi hover, nằm bên trái bubble nếu là tin của mình */}
+        {message.isOwn && (
+          <button
+            type="button"
+            onClick={handleReplyClick}
+            className="opacity-0 group-hover:opacity-100 transition-smooth rounded-full p-1.5 hover:bg-muted text-muted-foreground shrink-0"
+            aria-label="Trả lời"
+          >
+            <Reply className="size-3.5" />
+          </button>
+        )}
+
         {/* tin nhắn */}
         <div
           className={cn(
@@ -190,6 +215,24 @@ const MessageItem = ({
             message.isOwn ? "items-end" : "items-start"
           )}
         >
+          {message.replyTo && (
+            <div
+              className={cn(
+                "max-w-full rounded-lg border-l-2 border-primary/60 bg-muted/50 px-2 py-1",
+                message.isOwn ? "self-end" : "self-start"
+              )}
+            >
+              <p className="text-xs font-medium text-primary truncate">
+                {message.replyTo.senderName ?? "Tin nhắn"}
+              </p>
+              <p className="text-xs text-muted-foreground truncate max-w-[220px]">
+                {message.replyTo.imgUrl && !message.replyTo.content
+                  ? "Đã gửi một ảnh"
+                  : message.replyTo.content}
+              </p>
+            </div>
+          )}
+
           {message.imgUrl ? (
             <Card
               className={cn(
@@ -235,6 +278,18 @@ const MessageItem = ({
             </Badge>
           )}
         </div>
+
+        {/* nút trả lời - bên phải bubble nếu là tin của đối phương */}
+        {!message.isOwn && (
+          <button
+            type="button"
+            onClick={handleReplyClick}
+            className="opacity-0 group-hover:opacity-100 transition-smooth rounded-full p-1.5 hover:bg-muted text-muted-foreground shrink-0"
+            aria-label="Trả lời"
+          >
+            <Reply className="size-3.5" />
+          </button>
+        )}
       </div>
     </>
   );

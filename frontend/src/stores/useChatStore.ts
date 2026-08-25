@@ -1,6 +1,6 @@
 import { chatService } from "@/services/chatService";
 import type { ChatState } from "@/types/store";
-import type { Conversation } from "@/types/chat";
+import type { Conversation, Message, ReplyPreview } from "@/types/chat";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { useAuthStore } from "./useAuthStore";
@@ -15,8 +15,11 @@ export const useChatStore = create<ChatState>()(
       convoLoading: false, // convo loading
       messageLoading: false,
       loading: false,
+      replyingTo: null,
 
       setActiveConversation: (id) => set({ activeConversationId: id }),
+      setReplyingTo: (message: ReplyPreview | null) => set({ replyingTo: message }),
+      clearReplyingTo: () => set({ replyingTo: null }),
       reset: () => {
         set({
           conversations: [],
@@ -24,6 +27,7 @@ export const useChatStore = create<ChatState>()(
           activeConversationId: null,
           convoLoading: false,
           messageLoading: false,
+          replyingTo: null,
         });
       },
       fetchConversations: async () => {
@@ -85,14 +89,15 @@ export const useChatStore = create<ChatState>()(
           set({ messageLoading: false });
         }
       },
-      sendDirectMessage: async (recipientId, content, imgUrl) => {
+      sendDirectMessage: async (recipientId, content, imgUrl, replyTo) => {
         try {
           const { activeConversationId } = get();
           await chatService.sendDirectMessage(
             recipientId,
             content,
             imgUrl,
-            activeConversationId || undefined
+            activeConversationId || undefined,
+            replyTo
           );
           set((state) => ({
             conversations: state.conversations.map((c) =>
@@ -103,9 +108,9 @@ export const useChatStore = create<ChatState>()(
           console.error("Lỗi xảy ra khi gửi direct message", error);
         }
       },
-      sendGroupMessage: async (conversationId, content, imgUrl) => {
+      sendGroupMessage: async (conversationId, content, imgUrl, replyTo) => {
         try {
-          await chatService.sendGroupMessage(conversationId, content, imgUrl);
+          await chatService.sendGroupMessage(conversationId, content, imgUrl, replyTo);
           set((state) => ({
             conversations: state.conversations.map((c) =>
               c._id === get().activeConversationId ? { ...c, seenBy: [] } : c

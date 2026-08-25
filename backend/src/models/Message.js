@@ -39,6 +39,12 @@ const messageSchema = new mongoose.Schema(
       calleeId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
       durationInSeconds: { type: Number, default: 0 },
     },
+    // tin nhắn đang được trả lời (nếu có)
+    replyTo: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Message",
+      default: null,
+    },
   },
   {
     timestamps: true,
