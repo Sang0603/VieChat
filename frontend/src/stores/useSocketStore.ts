@@ -115,6 +115,12 @@ export const useSocketStore = create<SocketState>((set, get) => ({
         callType,
       });
     });
+
+    // 👇 MỚI THÊM: có người (bao gồm cả chính mình ở tab/thiết bị khác) vừa
+    // thả/đổi/gỡ reaction trên 1 tin nhắn -> cập nhật ngay trong khung chat
+    socket.on("reaction-updated", ({ conversationId, messageId, reactions }) => {
+      useChatStore.getState().updateMessageReaction(conversationId, messageId, reactions);
+    });
   },
   disconnectSocket: () => {
     const socket = get().socket;

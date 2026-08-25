@@ -62,6 +62,12 @@ export interface ReplyPreview {
   senderName?: string;
 }
 
+// 👇 MỚI THÊM: 1 reaction của 1 user trên 1 tin nhắn
+export interface MessageReaction {
+  userId: string;
+  emoji: string;
+}
+
 export interface Message {
   _id: string;
   conversationId: string;
@@ -76,4 +82,6 @@ export interface Message {
   callInfo?: CallInfo;
   // tin nhắn đang được trả lời (nếu có)
   replyTo?: ReplyPreview | null;
+  // 👇 MỚI THÊM: danh sách reaction hiện có trên tin nhắn
+  reactions?: MessageReaction[];
 }

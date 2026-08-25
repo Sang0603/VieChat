@@ -6,6 +6,7 @@ import { Badge } from "../ui/badge";
 import { PhoneIncoming, PhoneMissed, PhoneOutgoing, Reply } from "lucide-react";
 import { useStartCall } from "@/hooks/useStartCall";
 import { useChatStore } from "@/stores/useChatStore";
+import { useAuthStore } from "@/stores/useAuthStore"; // 👈 mới thêm
 
 interface MessageItemProps {
   message: Message;
@@ -14,6 +15,9 @@ interface MessageItemProps {
   selectedConvo: Conversation;
   lastMessageStatus: "delivered" | "seen";
 }
+
+// 👇 MỚI THÊM: bộ emoji reaction theo kiểu Facebook
+const REACTION_EMOJIS = ["👍", "❤️", "😆", "😮", "😢", "😡"];
 
 function getCallLabel(message: Message, isOwn: boolean) {
   const info = message.callInfo;
@@ -44,6 +48,43 @@ function getCallLabel(message: Message, isOwn: boolean) {
   };
 }
 
+// 👇 MỚI THÊM: thanh chọn emoji hiện khi hover vào tin nhắn (giống Facebook)
+const ReactionPicker = ({
+  isOwn,
+  myReaction,
+  onSelect,
+}: {
+  isOwn: boolean;
+  myReaction?: string;
+  onSelect: (emoji: string) => void;
+}) => {
+  return (
+    <div
+      className={cn(
+        "absolute -top-11 z-10 flex items-center gap-0.5 rounded-full bg-background border shadow-md px-2 py-1",
+        "opacity-0 scale-95 pointer-events-none",
+        "group-hover:opacity-100 group-hover:scale-100 group-hover:pointer-events-auto",
+        "transition-smooth",
+        isOwn ? "right-0" : "left-0"
+      )}
+    >
+      {REACTION_EMOJIS.map((emoji) => (
+        <button
+          key={emoji}
+          type="button"
+          onClick={() => onSelect(emoji)}
+          className={cn(
+            "text-lg leading-none rounded-full p-1.5 hover:scale-125 hover:bg-muted transition-transform",
+            myReaction === emoji && "bg-muted"
+          )}
+        >
+          {emoji}
+        </button>
+      ))}
+    </div>
+  );
+};
+
 const MessageItem = ({
   message,
   index,
@@ -52,6 +93,8 @@ const MessageItem = ({
   lastMessageStatus,
 }: MessageItemProps) => {
   const setReplyingTo = useChatStore((s) => s.setReplyingTo);
+  const toggleReaction = useChatStore((s) => s.toggleReaction); // 👈 mới thêm
+  const currentUser = useAuthStore((s) => s.user); // 👈 mới thêm
 
   const prev = index + 1 < messages.length ? messages[index + 1] : undefined;
 
@@ -84,6 +127,26 @@ const MessageItem = ({
       senderId: message.senderId,
       senderName: participant?.displayName,
     });
+  };
+
+  // 👇 MỚI THÊM: reaction của chính mình + tổng hợp reaction để hiển thị badge
+  const myReaction = message.reactions?.find(
+    (r) => r.userId === currentUser?._id
+  )?.emoji;
+
+  const reactionSummary = message.reactions?.length
+    ? Object.entries(
+        message.reactions.reduce<Record<string, number>>((acc, r) => {
+          acc[r.emoji] = (acc[r.emoji] || 0) + 1;
+          return acc;
+        }, {})
+      ).sort((a, b) => b[1] - a[1])
+    : [];
+
+  const totalReactions = message.reactions?.length ?? 0;
+
+  const handleSelectReaction = (emoji: string) => {
+    toggleReaction(message._id, emoji);
   };
 
   if (isCallMessage) {
@@ -211,10 +274,17 @@ const MessageItem = ({
         {/* tin nhắn */}
         <div
           className={cn(
-            "max-w-xs lg:max-w-md space-y-1 flex flex-col",
+            "relative max-w-xs lg:max-w-md space-y-1 flex flex-col",
             message.isOwn ? "items-end" : "items-start"
           )}
         >
+          {/* 👇 MỚI THÊM: thanh chọn emoji, hiện khi hover vào cả dòng tin nhắn */}
+          <ReactionPicker
+            isOwn={!!message.isOwn}
+            myReaction={myReaction}
+            onSelect={handleSelectReaction}
+          />
+
           {message.replyTo && (
             <div
               className={cn(
@@ -261,6 +331,27 @@ const MessageItem = ({
             >
               <p className="text-sm leading-relaxed break-words">{message.content}</p>
             </Card>
+          )}
+
+          {/* 👇 MỚI THÊM: badge tổng hợp reaction, đè lên góc dưới bubble giống Facebook */}
+          {totalReactions > 0 && (
+            <div
+              className={cn(
+                "-mt-2.5 flex items-center gap-0.5 rounded-full border bg-background px-1.5 py-0.5 text-xs shadow-sm z-[1]",
+                message.isOwn ? "self-end mr-2" : "self-start ml-2"
+              )}
+            >
+              {reactionSummary.slice(0, 3).map(([emoji]) => (
+                <span key={emoji} className="leading-none">
+                  {emoji}
+                </span>
+              ))}
+              {totalReactions > 1 && (
+                <span className="text-muted-foreground leading-none ml-0.5">
+                  {totalReactions}
+                </span>
+              )}
+            </div>
           )}
 
           {/* seen/ delivered */}

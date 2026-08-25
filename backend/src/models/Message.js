@@ -45,6 +45,24 @@ const messageSchema = new mongoose.Schema(
       ref: "Message",
       default: null,
     },
+    // 👇 MỚI THÊM: danh sách reaction (mỗi user chỉ được 1 reaction/tin nhắn)
+    reactions: {
+      type: [
+        {
+          userId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
+            required: true,
+          },
+          emoji: {
+            type: String,
+            required: true,
+          },
+          _id: false,
+        },
+      ],
+      default: [],
+    },
   },
   {
     timestamps: true,

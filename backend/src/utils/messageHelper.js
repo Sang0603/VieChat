@@ -33,3 +33,13 @@ export const emitNewMessage = (io, conversation, message) => {
     unreadCounts: conversation.unreadCounts,
   });
 };
+
+// 👇 MỚI THÊM: báo cho toàn bộ thành viên trong conversation biết
+// reactions của 1 tin nhắn vừa thay đổi (thêm/đổi/gỡ)
+export const emitReactionUpdate = (io, conversation, message) => {
+  io.to(conversation._id.toString()).emit("reaction-updated", {
+    messageId: message._id,
+    conversationId: conversation._id,
+    reactions: message.reactions,
+  });
+};

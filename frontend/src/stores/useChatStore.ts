@@ -1,6 +1,6 @@
 import { chatService } from "@/services/chatService";
 import type { ChatState } from "@/types/store";
-import type { Conversation, ReplyPreview } from "@/types/chat";
+import type { Conversation, MessageReaction, ReplyPreview } from "@/types/chat";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { useAuthStore } from "./useAuthStore";
@@ -233,6 +233,43 @@ export const useChatStore = create<ChatState>()(
           console.error("Lỗi xảy ra khi gọi createConversation trong store", error);
         } finally {
           set({ loading: false });
+        }
+      },
+
+      // 👇 MỚI THÊM: cập nhật reactions của 1 message trong state
+      // (dùng chung cho cả optimistic update lúc bấm và khi nhận socket từ người khác)
+      updateMessageReaction: (conversationId, messageId, reactions) => {
+        set((state) => {
+          const convoMessages = state.messages[conversationId];
+
+          if (!convoMessages) return state;
+
+          return {
+            messages: {
+              ...state.messages,
+              [conversationId]: {
+                ...convoMessages,
+                items: convoMessages.items.map((m) =>
+                  m._id === messageId ? { ...m, reactions } : m
+                ),
+              },
+            },
+          };
+        });
+      },
+
+      // 👇 MỚI THÊM: gọi API thả/đổi/gỡ reaction rồi cập nhật state cho tin nhắn
+      // đang thuộc conversation đang mở
+      toggleReaction: async (messageId, emoji) => {
+        try {
+          const reactions = await chatService.toggleReaction(messageId, emoji);
+          const { activeConversationId } = get();
+
+          if (activeConversationId) {
+            get().updateMessageReaction(activeConversationId, messageId, reactions);
+          }
+        } catch (error) {
+          console.error("Lỗi xảy ra khi thả reaction", error);
         }
       },
     }),

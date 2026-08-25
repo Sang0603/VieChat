@@ -1,5 +1,5 @@
 import type { Socket } from "socket.io-client";
-import type { Conversation, Message, ReplyPreview } from "./chat";
+import type { Conversation, Message, MessageReaction, ReplyPreview } from "./chat"; // 👈 thêm MessageReaction
 import type { Friend, FriendRequest, User } from "./user";
 import type { UpdateProfilePayload } from "@/services/userService";
 
@@ -71,6 +71,15 @@ export interface ChatState {
     name: string,
     memberIds: string[]
   ) => Promise<void>;
+  // 👇 MỚI THÊM: cập nhật reactions của 1 message trong state (dùng cho cả
+  // optimistic update lúc bấm và khi nhận socket "reaction-updated")
+  updateMessageReaction: (
+    conversationId: string,
+    messageId: string,
+    reactions: MessageReaction[]
+  ) => void;
+  // 👇 MỚI THÊM: gọi API thả/đổi/gỡ reaction cho 1 tin nhắn
+  toggleReaction: (messageId: string, emoji: string) => Promise<void>;
 }
 
 export interface SocketState {

@@ -2,6 +2,7 @@ import Conversation from "../models/Conversation.js";
 import Message from "../models/Message.js";
 import {
   emitNewMessage,
+  emitReactionUpdate, // 👈 mới thêm
   updateConversationAfterCreateMessage,
 } from "../utils/messageHelper.js";
 import { io } from "../socket/index.js";
@@ -128,6 +129,69 @@ export const sendGroupMessage = async (req, res) => {
     return res.status(201).json({ message: formattedMessage });
   } catch (error) {
     console.error("Lỗi xảy ra khi gửi tin nhắn nhóm", error);
+    return res.status(500).json({ message: "Lỗi hệ thống" });
+  }
+};
+
+// 👇 MỚI THÊM: thả / đổi / gỡ reaction cho một tin nhắn
+// - Nếu user chưa có reaction trên message này -> thêm mới
+// - Nếu user đã thả cùng 1 emoji -> bấm lại để gỡ (toggle off)
+// - Nếu user đã thả emoji khác -> đổi sang emoji mới
+export const toggleReaction = async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const { emoji } = req.body;
+    const userId = req.user._id;
+
+    if (!emoji) {
+      return res.status(400).json({ message: "Thiếu emoji" });
+    }
+
+    const message = await Message.findById(messageId);
+
+    if (!message) {
+      return res.status(404).json({ message: "Không tìm thấy tin nhắn" });
+    }
+
+    const conversation = await Conversation.findById(message.conversationId);
+
+    if (!conversation) {
+      return res.status(404).json({ message: "Không tìm thấy cuộc trò chuyện" });
+    }
+
+    const isMember = conversation.participants.some(
+      (p) => p.userId.toString() === userId.toString()
+    );
+
+    if (!isMember) {
+      return res
+        .status(403)
+        .json({ message: "Bạn không có quyền thực hiện thao tác này" });
+    }
+
+    const existingIndex = message.reactions.findIndex(
+      (r) => r.userId.toString() === userId.toString()
+    );
+
+    if (existingIndex !== -1) {
+      if (message.reactions[existingIndex].emoji === emoji) {
+        // bấm lại cùng emoji -> gỡ reaction
+        message.reactions.splice(existingIndex, 1);
+      } else {
+        // đổi sang emoji khác
+        message.reactions[existingIndex].emoji = emoji;
+      }
+    } else {
+      message.reactions.push({ userId, emoji });
+    }
+
+    await message.save();
+
+    emitReactionUpdate(io, conversation, message);
+
+    return res.status(200).json({ reactions: message.reactions });
+  } catch (error) {
+    console.error("Lỗi xảy ra khi thả reaction", error);
     return res.status(500).json({ message: "Lỗi hệ thống" });
   }
 };

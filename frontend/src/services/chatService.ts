@@ -1,5 +1,5 @@
 import api from "@/lib/axios";
-import type { ConversationResponse, Message } from "@/types/chat";
+import type { ConversationResponse, Message, MessageReaction } from "@/types/chat";
 
 interface FetchMessageProps {
   messages: Message[];
@@ -78,5 +78,11 @@ export const chatService = {
   ) {
     const res = await api.post("/conversations", { type, name, memberIds });
     return res.data.conversation;
+  },
+
+  //  thả / đổi / gỡ reaction cho 1 tin nhắn
+  async toggleReaction(messageId: string, emoji: string): Promise<MessageReaction[]> {
+    const res = await api.patch(`/messages/${messageId}/reaction`, { emoji });
+    return res.data.reactions;
   },
 };
