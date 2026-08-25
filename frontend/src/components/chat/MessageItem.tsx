@@ -1,9 +1,10 @@
+import { useRef, useState } from "react";
 import { cn, formatMessageTime } from "@/lib/utils";
 import type { Conversation, Message, Participant } from "@/types/chat";
 import UserAvatar from "./UserAvatar";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
-import { PhoneIncoming, PhoneMissed, PhoneOutgoing, Reply } from "lucide-react";
+import { PhoneIncoming, PhoneMissed, PhoneOutgoing, Reply, ThumbsUp } from "lucide-react";
 import { useStartCall } from "@/hooks/useStartCall";
 import { useChatStore } from "@/stores/useChatStore";
 import { useAuthStore } from "@/stores/useAuthStore"; // 👈 mới thêm
@@ -18,6 +19,9 @@ interface MessageItemProps {
 
 // 👇 MỚI THÊM: bộ emoji reaction theo kiểu Facebook
 const REACTION_EMOJIS = ["👍", "❤️", "😆", "😮", "😢", "😡"];
+
+// 👇 MỚI THÊM: emoji mặc định khi bấm nhanh vào icon like nhỏ
+const DEFAULT_REACTION = "👍";
 
 function getCallLabel(message: Message, isOwn: boolean) {
   const info = message.callInfo;
@@ -48,23 +52,32 @@ function getCallLabel(message: Message, isOwn: boolean) {
   };
 }
 
-// 👇 MỚI THÊM: thanh chọn emoji hiện khi hover vào tin nhắn (giống Facebook)
+// 👇 MỚI THÊM: thanh chọn emoji đầy đủ, chỉ bung ra khi hover vào nút like nhỏ
 const ReactionPicker = ({
   isOwn,
   myReaction,
+  visible,
   onSelect,
+  onMouseEnter,
+  onMouseLeave,
 }: {
   isOwn: boolean;
   myReaction?: string;
+  visible: boolean;
   onSelect: (emoji: string) => void;
+  onMouseEnter: () => void;
+  onMouseLeave: () => void;
 }) => {
   return (
     <div
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       className={cn(
-        "absolute -top-11 z-10 flex items-center gap-0.5 rounded-full bg-background border shadow-md px-2 py-1",
-        "opacity-0 scale-95 pointer-events-none",
-        "group-hover:opacity-100 group-hover:scale-100 group-hover:pointer-events-auto",
+        "absolute -top-11 z-20 flex items-center gap-0.5 rounded-full bg-background border shadow-md px-2 py-1",
         "transition-smooth",
+        visible
+          ? "opacity-100 scale-100 pointer-events-auto"
+          : "opacity-0 scale-95 pointer-events-none",
         isOwn ? "right-0" : "left-0"
       )}
     >
@@ -85,6 +98,45 @@ const ReactionPicker = ({
   );
 };
 
+// 👇 MỚI THÊM: icon like nhỏ, hiện khi hover vào tin nhắn (giống ảnh mẫu),
+// hover tiếp vào đây mới bung ReactionPicker đầy đủ
+const QuickReactButton = ({
+  isOwn,
+  myReaction,
+  onQuickReact,
+  onMouseEnter,
+  onMouseLeave,
+}: {
+  isOwn: boolean;
+  myReaction?: string;
+  onQuickReact: () => void;
+  onMouseEnter: () => void;
+  onMouseLeave: () => void;
+}) => {
+  return (
+    <button
+      type="button"
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+      onClick={onQuickReact}
+      className={cn(
+        "absolute -top-3 z-10 flex items-center justify-center size-6 rounded-full border bg-background shadow-sm",
+        "opacity-0 scale-90 pointer-events-none",
+        "group-hover:opacity-100 group-hover:scale-100 group-hover:pointer-events-auto",
+        "transition-smooth hover:scale-110",
+        isOwn ? "right-0" : "left-0"
+      )}
+      aria-label="Thả cảm xúc"
+    >
+      {myReaction ? (
+        <span className="text-sm leading-none">{myReaction}</span>
+      ) : (
+        <ThumbsUp className="size-3.5 text-muted-foreground" />
+      )}
+    </button>
+  );
+};
+
 const MessageItem = ({
   message,
   index,
@@ -95,6 +147,21 @@ const MessageItem = ({
   const setReplyingTo = useChatStore((s) => s.setReplyingTo);
   const toggleReaction = useChatStore((s) => s.toggleReaction); // 👈 mới thêm
   const currentUser = useAuthStore((s) => s.user); // 👈 mới thêm
+
+  // 👇 MỚI THÊM: state điều khiển hiện/ẩn thanh emoji picker (tầng 2)
+  const [showPicker, setShowPicker] = useState(false);
+  const hidePickerTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const openPicker = () => {
+    if (hidePickerTimeout.current) clearTimeout(hidePickerTimeout.current);
+    setShowPicker(true);
+  };
+
+  const closePickerDelayed = () => {
+    hidePickerTimeout.current = setTimeout(() => {
+      setShowPicker(false);
+    }, 200);
+  };
 
   const prev = index + 1 < messages.length ? messages[index + 1] : undefined;
 
@@ -147,6 +214,12 @@ const MessageItem = ({
 
   const handleSelectReaction = (emoji: string) => {
     toggleReaction(message._id, emoji);
+    setShowPicker(false);
+  };
+
+  // 👇 MỚI THÊM: bấm nhanh vào icon like nhỏ -> toggle reaction mặc định (👍)
+  const handleQuickReact = () => {
+    toggleReaction(message._id, myReaction ?? DEFAULT_REACTION);
   };
 
   if (isCallMessage) {
@@ -278,11 +351,23 @@ const MessageItem = ({
             message.isOwn ? "items-end" : "items-start"
           )}
         >
-          {/* 👇 MỚI THÊM: thanh chọn emoji, hiện khi hover vào cả dòng tin nhắn */}
+          {/* 👇 MỚI THÊM: icon like nhỏ - hiện khi hover message (CSS group-hover) */}
+          <QuickReactButton
+            isOwn={!!message.isOwn}
+            myReaction={myReaction}
+            onQuickReact={handleQuickReact}
+            onMouseEnter={openPicker}
+            onMouseLeave={closePickerDelayed}
+          />
+
+          {/* 👇 MỚI THÊM: thanh chọn emoji đầy đủ - chỉ hiện khi hover vào icon like nhỏ */}
           <ReactionPicker
             isOwn={!!message.isOwn}
             myReaction={myReaction}
+            visible={showPicker}
             onSelect={handleSelectReaction}
+            onMouseEnter={openPicker}
+            onMouseLeave={closePickerDelayed}
           />
 
           {message.replyTo && (
