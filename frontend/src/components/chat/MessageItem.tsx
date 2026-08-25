@@ -48,8 +48,9 @@ function getCallLabel(message: Message, isOwn: boolean) {
   };
 }
 
-// 👇 SỬA: nút like nhỏ giờ nằm ở góc DƯỚI - PHẢI bubble (theo ảnh mẫu),
-// thanh emoji vẫn bung lên phía TRÊN nút khi hover vào nút.
+// nút like nhỏ LUÔN đứng cố định 1 vị trí (absolute, không nằm trong flex-col
+// nữa), thanh emoji cũng absolute, chỉ đổi opacity/scale khi bung ra -> không còn đẩy
+// nút like dịch chuyển như trước.
 const ReactionTrigger = ({
   myReaction,
   visible,
@@ -73,19 +74,36 @@ const ReactionTrigger = ({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       className={cn(
-        "absolute -bottom-3 right-1 z-20 flex flex-col items-center",
+        "absolute -bottom-3 right-1 z-20",
         "transition-opacity",
         visible || showPicker ? "opacity-100" : "opacity-0 pointer-events-none"
       )}
     >
-      {/* thanh emoji đầy đủ, bung lên phía trên nút */}
+      {/* nút like nhỏ - đứng cố định, không bị thanh emoji đẩy đi nữa */}
+      <button
+        type="button"
+        onClick={onQuickReact}
+        className={cn(
+          "flex items-center justify-center size-6 rounded-full border bg-background shadow-sm",
+          "hover:scale-110 transition-transform"
+        )}
+        aria-label="Thả cảm xúc"
+      >
+        {myReaction ? (
+          <span className="text-sm leading-none">{myReaction}</span>
+        ) : (
+          <ThumbsUp className="size-3.5 text-muted-foreground" />
+        )}
+      </button>
+
+      {/* thanh emoji - luôn absolute, bung lên phía TRÊN nút, không đẩy layout */}
       <div
         className={cn(
-          "mb-2 flex items-center gap-0.5 rounded-full bg-background border shadow-md px-2 py-1",
-          "transition-smooth origin-bottom",
+          "absolute bottom-full right-0 mb-2 flex items-center gap-0.5 rounded-full bg-background border shadow-md px-2 py-1",
+          "transition-smooth origin-bottom-right",
           showPicker
             ? "opacity-100 scale-100 pointer-events-auto"
-            : "opacity-0 scale-90 pointer-events-none absolute bottom-full right-0"
+            : "opacity-0 scale-90 pointer-events-none"
         )}
       >
         {REACTION_EMOJIS.map((emoji) => (
@@ -102,23 +120,6 @@ const ReactionTrigger = ({
           </button>
         ))}
       </div>
-
-      {/* nút like nhỏ - đè lên góc dưới-phải bubble, giống ảnh mẫu */}
-      <button
-        type="button"
-        onClick={onQuickReact}
-        className={cn(
-          "flex items-center justify-center size-6 rounded-full border bg-background shadow-sm",
-          "hover:scale-110 transition-transform"
-        )}
-        aria-label="Thả cảm xúc"
-      >
-        {myReaction ? (
-          <span className="text-sm leading-none">{myReaction}</span>
-        ) : (
-          <ThumbsUp className="size-3.5 text-muted-foreground" />
-        )}
-      </button>
     </div>
   );
 };
