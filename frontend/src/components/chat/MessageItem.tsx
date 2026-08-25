@@ -48,10 +48,11 @@ function getCallLabel(message: Message, isOwn: boolean) {
   };
 }
 
-// nút like nhỏ LUÔN đứng cố định 1 vị trí (absolute, không nằm trong flex-col
-// nữa), thanh emoji cũng absolute, chỉ đổi opacity/scale khi bung ra -> không còn đẩy
-// nút like dịch chuyển như trước.
+// Nút like nhỏ luôn đứng cố định 1 vị trí (absolute), thanh emoji cũng absolute,
+// chỉ đổi opacity/scale khi bung ra -> không đẩy nút like dịch chuyển.
+// Hướng bung của thanh emoji đổi theo isOwn để không bị tràn/cắt icon ở mép khung.
 const ReactionTrigger = ({
+  isOwn,
   myReaction,
   visible,
   showPicker,
@@ -74,12 +75,14 @@ const ReactionTrigger = ({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       className={cn(
-        "absolute -bottom-3 right-1 z-20",
+        "absolute -bottom-3 z-20",
+        // tin nhắn của mình neo theo cạnh phải bubble, tin nhắn người khác neo theo cạnh trái
+        isOwn ? "right-1" : "left-1",
         "transition-opacity",
         visible || showPicker ? "opacity-100" : "opacity-0 pointer-events-none"
       )}
     >
-      {/* nút like nhỏ - đứng cố định, không bị thanh emoji đẩy đi nữa */}
+      {/* nút like nhỏ - đứng cố định, không bị thanh emoji đẩy đi */}
       <button
         type="button"
         onClick={onQuickReact}
@@ -96,11 +99,14 @@ const ReactionTrigger = ({
         )}
       </button>
 
-      {/* thanh emoji - luôn absolute, bung lên phía TRÊN nút, không đẩy layout */}
+      {/* thanh emoji - luôn absolute, bung lên phía TRÊN nút.
+          Tin nhắn của mình: bung sang trái (right-0).
+          Tin nhắn người khác: bung sang phải (left-0) để tránh tràn/cắt mất icon. */}
       <div
         className={cn(
-          "absolute bottom-full right-0 mb-2 flex items-center gap-0.5 rounded-full bg-background border shadow-md px-2 py-1",
-          "transition-smooth origin-bottom-right",
+          "absolute bottom-full mb-2 flex items-center gap-0.5 rounded-full bg-background border shadow-md px-2 py-1",
+          "transition-smooth",
+          isOwn ? "right-0 origin-bottom-right" : "left-0 origin-bottom-left",
           showPicker
             ? "opacity-100 scale-100 pointer-events-auto"
             : "opacity-0 scale-90 pointer-events-none"
@@ -322,7 +328,9 @@ const MessageItem = ({
           <button
             type="button"
             onClick={handleReplyClick}
-            className="opacity-0 group-hover:opacity-100 transition-smooth rounded-full p-1.5 hover:bg-muted text-muted-foreground shrink-0"
+            // Trên mobile không có hover -> luôn hiện sẵn (opacity-100).
+            // Từ sm trở lên (có chuột) mới ẩn và chỉ hiện khi hover message.
+            className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-smooth rounded-full p-1.5 hover:bg-muted text-muted-foreground shrink-0"
             aria-label="Trả lời"
           >
             <Reply className="size-3.5" />
@@ -433,7 +441,9 @@ const MessageItem = ({
           <button
             type="button"
             onClick={handleReplyClick}
-            className="opacity-0 group-hover:opacity-100 transition-smooth rounded-full p-1.5 hover:bg-muted text-muted-foreground shrink-0"
+            // Trên mobile không có hover -> luôn hiện sẵn (opacity-100).
+            // Từ sm trở lên (có chuột) mới ẩn và chỉ hiện khi hover message.
+            className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-smooth rounded-full p-1.5 hover:bg-muted text-muted-foreground shrink-0"
             aria-label="Trả lời"
           >
             <Reply className="size-3.5" />
