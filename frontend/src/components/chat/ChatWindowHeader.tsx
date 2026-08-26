@@ -13,7 +13,7 @@ import VideoCallButton from "../call/VideoCallButton";
 import FriendProfileDialog from "./FriendProfileDialog";
 
 const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
-  const { conversations, activeConversationId } = useChatStore();
+  const { conversations, activeConversationId, typingUsers } = useChatStore();
   const { user } = useAuthStore();
   const { onlineUsers } = useSocketStore();
   const [profileOpen, setProfileOpen] = useState(false);
@@ -36,6 +36,25 @@ const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
 
     if (!user || !otherUser) return;
   }
+
+  // 👇 MỚI THÊM: danh sách người đang gõ trong conversation này, trừ chính mình
+  // (thực ra server đã tự loại trừ mình qua socket.to(), nhưng lọc lại cho chắc)
+  const currentTypers = (typingUsers[chat._id] ?? []).filter(
+    (t) => t.userId !== user?._id
+  );
+  const isTyping = currentTypers.length > 0;
+
+  // 👇 MỚI THÊM: build text hiển thị - direct chat chỉ có 1 người nên luôn là
+  // "Đang nhập...", group chat thì show tên (hoặc "X người đang nhập..." nếu nhiều)
+  const getTypingText = () => {
+    if (chat!.type === "direct") return "Đang nhập...";
+
+    if (currentTypers.length === 1) {
+      return `${currentTypers[0].displayName ?? "Ai đó"} đang nhập...`;
+    }
+
+    return "Nhiều người đang nhập...";
+  };
 
   return (
     <header className="sticky top-0 z-10 px-4 py-2 flex items-center bg-background">
@@ -73,10 +92,18 @@ const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
             )}
           </div>
 
-          {/* name */}
-          <h2 className="font-semibold text-foreground truncate">
-            {chat.type === "direct" ? otherUser?.displayName : chat.group?.name}
-          </h2>
+          {/* name + typing indicator */}
+          <div className="min-w-0">
+            <h2 className="font-semibold text-foreground truncate">
+              {chat.type === "direct" ? otherUser?.displayName : chat.group?.name}
+            </h2>
+            {/* 👇 MỚI THÊM */}
+            {isTyping && (
+              <p className="text-xs text-primary truncate animate-pulse">
+                {getTypingText()}
+              </p>
+            )}
+          </div>
         </button>
 
         {/* nút gọi thoại + gọi video + nút mở panel - chỉ hiện với chat 1-1, chưa hỗ trợ gọi nhóm */}

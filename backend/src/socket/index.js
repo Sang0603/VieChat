@@ -45,6 +45,37 @@ io.on("connection", async (socket) => {
   // 👇 mới thêm: đăng ký toàn bộ event liên quan tới gọi thoại
   registerCallHandlers(io, socket, onlineUsers);
 
+  // ==================== 👇 MỚI THÊM: TYPING INDICATOR ====================
+  // Client gửi "typing:start" mỗi khi đang gõ (đã debounce ở phía client),
+  // server chỉ relay lại cho những người KHÁC trong cùng conversation
+  // (dùng socket.to(...) chứ không phải io.to(...) để tự loại trừ chính
+  // người gửi). Không lưu DB vì đây là trạng thái tạm thời, không cần
+  // persist qua reload trang.
+  //
+  // LƯU Ý: client PHẢI đã join room conversationId trước đó (đã tự động
+  // xảy ra ở đoạn conversationIds.forEach ở trên, hoặc lúc emit
+  // "join-conversation" khi tạo group/direct mới), nếu không thì
+  // socket.to(conversationId) sẽ không có ai để gửi tới.
+  socket.on("typing:start", ({ conversationId }) => {
+    if (!conversationId) return;
+
+    socket.to(conversationId).emit("typing:start", {
+      conversationId,
+      userId: user._id.toString(),
+      displayName: user.displayName,
+    });
+  });
+
+  socket.on("typing:stop", ({ conversationId }) => {
+    if (!conversationId) return;
+
+    socket.to(conversationId).emit("typing:stop", {
+      conversationId,
+      userId: user._id.toString(),
+    });
+  });
+  // ==================== HẾT PHẦN TYPING INDICATOR ====================
+
   socket.on("disconnect", () => {
     // 👇 ĐỔI: .toString() cho khớp với dòng set ở trên
     onlineUsers.delete(user._id.toString());

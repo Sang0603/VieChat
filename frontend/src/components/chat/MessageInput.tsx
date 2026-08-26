@@ -1,20 +1,23 @@
 import { useAuthStore } from "@/stores/useAuthStore";
 import type { Conversation } from "@/types/chat";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "../ui/button";
 import { ImagePlus, Send, X, Loader2, Reply } from "lucide-react";
 import { Input } from "../ui/input";
 import EmojiPicker from "./EmojiPicker";
 import { useChatStore } from "@/stores/useChatStore";
+import { useSocketStore } from "@/stores/useSocketStore";
 import { chatService } from "@/services/chatService";
 import { toast } from "sonner";
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB, khớp với giới hạn backend
+const TYPING_STOP_DELAY = 2000; // ms - sau 2s ngừng gõ thì coi như đã ngừng "đang nhập"
 
 const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
   const { user } = useAuthStore();
   const { sendDirectMessage, sendGroupMessage, replyingTo, clearReplyingTo } =
     useChatStore();
+  const { startTyping, stopTyping } = useSocketStore();
   const [value, setValue] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -22,7 +25,50 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // 👇 MỚI THÊM: theo dõi trạng thái "đang gõ" cục bộ ở client, tránh
+  // spam emit typing:start liên tục mỗi lần gõ 1 ký tự
+  const isTypingRef = useRef(false);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 👇 MỚI THÊM: khi chuyển sang conversation khác hoặc component unmount,
+  // đảm bảo báo "ngừng gõ" cho conversation cũ để không bị kẹt trạng thái
+  // "Đang nhập..." bên phía người kia
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      if (isTypingRef.current) {
+        stopTyping(selectedConvo._id);
+        isTypingRef.current = false;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedConvo._id]);
+
   if (!user) return;
+
+  // 👇 MỚI THÊM: gọi mỗi khi nội dung input thay đổi
+  const handleTypingSignal = () => {
+    if (!isTypingRef.current) {
+      isTypingRef.current = true;
+      startTyping(selectedConvo._id);
+    }
+
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+
+    typingTimeoutRef.current = setTimeout(() => {
+      isTypingRef.current = false;
+      stopTyping(selectedConvo._id);
+    }, TYPING_STOP_DELAY);
+  };
+
+  // 👇 MỚI THÊM: dừng ngay lập tức khi gửi tin (không cần đợi hết 2s)
+  const stopTypingImmediately = () => {
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    if (isTypingRef.current) {
+      isTypingRef.current = false;
+      stopTyping(selectedConvo._id);
+    }
+  };
 
   const handlePickImage = () => {
     fileInputRef.current?.click();
@@ -67,6 +113,7 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
     setValue("");
     clearImage();
     clearReplyingTo();
+    stopTypingImmediately(); // 👈 MỚI THÊM
     setSending(true);
 
     try {
@@ -115,6 +162,12 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
       e.preventDefault();
       sendMessage();
     }
+  };
+
+  // 👇 MỚI THÊM: gộp việc setValue + báo hiệu đang gõ vào 1 chỗ
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setValue(e.target.value);
+    handleTypingSignal();
   };
 
   return (
@@ -187,7 +240,7 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
           <Input
             onKeyPress={handleKeyPress}
             value={value}
-            onChange={(e) => setValue(e.target.value)}
+            onChange={handleChange}
             placeholder="Soạn tin nhắn..."
             disabled={sending}
             className="pr-20 h-9 bg-white border-border/50 focus:border-primary/50 transition-smooth resize-none"

@@ -16,6 +16,7 @@ export const useChatStore = create<ChatState>()(
       messageLoading: false,
       loading: false,
       replyingTo: null,
+      typingUsers: {}, // 👈 MỚI THÊM: { [conversationId]: { userId, displayName }[] }
 
       setActiveConversation: (id) => set({ activeConversationId: id }),
       setReplyingTo: (message: ReplyPreview | null) => set({ replyingTo: message }),
@@ -28,6 +29,7 @@ export const useChatStore = create<ChatState>()(
           convoLoading: false,
           messageLoading: false,
           replyingTo: null,
+          typingUsers: {}, // 👈 MỚI THÊM
         });
       },
       fetchConversations: async () => {
@@ -272,6 +274,35 @@ export const useChatStore = create<ChatState>()(
           console.error("Lỗi xảy ra khi thả reaction", error);
         }
       },
+
+      // ==================== 👇 MỚI THÊM: TYPING INDICATOR ====================
+      // typingUser chỉ cần userId là bắt buộc, displayName optional (khi ngừng
+      // gõ, server không gửi kèm displayName nên không cần).
+      setUserTyping: (conversationId, typingUser, isTyping) => {
+        set((state) => {
+          const current = state.typingUsers[conversationId] ?? [];
+          let updated;
+
+          if (isTyping) {
+            const alreadyIn = current.some((u) => u.userId === typingUser.userId);
+            updated = alreadyIn
+              ? current.map((u) =>
+                  u.userId === typingUser.userId ? { ...u, ...typingUser } : u
+                )
+              : [...current, typingUser];
+          } else {
+            updated = current.filter((u) => u.userId !== typingUser.userId);
+          }
+
+          return {
+            typingUsers: {
+              ...state.typingUsers,
+              [conversationId]: updated,
+            },
+          };
+        });
+      },
+      // ==================== HẾT PHẦN TYPING INDICATOR ====================
     }),
     {
       name: "chat-storage",

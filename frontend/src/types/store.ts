@@ -30,6 +30,13 @@ export interface ThemeState {
   setTheme: (dark: boolean) => void;
 }
 
+// 👇 MỚI THÊM: 1 người đang gõ trong 1 conversation. displayName optional vì
+// khi server báo "typing:stop" chỉ gửi kèm userId, không có displayName.
+export interface TypingUser {
+  userId: string;
+  displayName?: string;
+}
+
 export interface ChatState {
   conversations: Conversation[];
   messages: Record<string, { items: Message[]; hasMore: boolean; nextCursor?: string | null }>;
@@ -39,6 +46,8 @@ export interface ChatState {
   loading: boolean;
   // tin nhắn đang được chọn để trả lời (hiện preview phía trên ô nhập)
   replyingTo: ReplyPreview | null;
+  // 👇 MỚI THÊM: danh sách người đang gõ theo từng conversationId
+  typingUsers: Record<string, TypingUser[]>;
   reset: () => void;
 
   setActiveConversation: (id: string | null) => void;
@@ -80,6 +89,13 @@ export interface ChatState {
   ) => void;
   // 👇 MỚI THÊM: gọi API thả/đổi/gỡ reaction cho 1 tin nhắn
   toggleReaction: (messageId: string, emoji: string) => Promise<void>;
+  // 👇 MỚI THÊM: cập nhật trạng thái đang gõ của 1 user trong 1 conversation
+  // (gọi khi nhận socket "typing:start"/"typing:stop")
+  setUserTyping: (
+    conversationId: string,
+    typingUser: TypingUser,
+    isTyping: boolean
+  ) => void;
 }
 
 export interface SocketState {
@@ -87,6 +103,10 @@ export interface SocketState {
   onlineUsers: string[];
   connectSocket: () => void;
   disconnectSocket: () => void;
+  // 👇 MỚI THÊM: emit báo cho những người khác trong conversation biết
+  // mình đang gõ / vừa ngừng gõ
+  startTyping: (conversationId: string) => void;
+  stopTyping: (conversationId: string) => void;
 }
 
 export interface FriendState {

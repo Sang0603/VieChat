@@ -59,6 +59,13 @@ export const useSocketStore = create<SocketState>((set, get) => ({
       }
 
       useChatStore.getState().updateConversation(updatedConversation);
+
+      // 👇 MỚI THÊM: có tin nhắn mới nghĩa là người gửi đã ngừng gõ rồi ->
+      // dọn luôn trạng thái "đang nhập..." của họ để tránh bị kẹt hiển thị
+      // (phòng trường hợp client kia gửi tin quá nhanh, chưa kịp emit typing:stop)
+      useChatStore
+        .getState()
+        .setUserTyping(message.conversationId, { userId: message.senderId }, false);
     });
 
     // read message
@@ -121,6 +128,16 @@ export const useSocketStore = create<SocketState>((set, get) => ({
     socket.on("reaction-updated", ({ conversationId, messageId, reactions }) => {
       useChatStore.getState().updateMessageReaction(conversationId, messageId, reactions);
     });
+
+    // ==================== 👇 MỚI THÊM: TYPING INDICATOR ====================
+    socket.on("typing:start", ({ conversationId, userId, displayName }) => {
+      useChatStore.getState().setUserTyping(conversationId, { userId, displayName }, true);
+    });
+
+    socket.on("typing:stop", ({ conversationId, userId }) => {
+      useChatStore.getState().setUserTyping(conversationId, { userId }, false);
+    });
+    // ==================== HẾT PHẦN TYPING INDICATOR ====================
   },
   disconnectSocket: () => {
     const socket = get().socket;
@@ -128,5 +145,20 @@ export const useSocketStore = create<SocketState>((set, get) => ({
       socket.disconnect();
       set({ socket: null });
     }
+  },
+
+  // 👇 MỚI THÊM: 2 hàm để component gọi khi user bắt đầu/ngừng gõ.
+  // Không tự debounce ở đây — phần debounce (đợi ngừng gõ ~2s rồi mới
+  // gọi stopTyping) nằm ở MessageInput.tsx, vì đó là nơi biết chính xác
+  // khi nào user gõ tiếp/dừng.
+  startTyping: (conversationId) => {
+    const socket = get().socket;
+    if (!socket || !conversationId) return;
+    socket.emit("typing:start", { conversationId });
+  },
+  stopTyping: (conversationId) => {
+    const socket = get().socket;
+    if (!socket || !conversationId) return;
+    socket.emit("typing:stop", { conversationId });
   },
 }));
