@@ -2,7 +2,7 @@ import Conversation from "../models/Conversation.js";
 import Message from "../models/Message.js";
 import {
   emitNewMessage,
-  emitReactionUpdate, // 👈 mới thêm
+  emitReactionUpdate,
   updateConversationAfterCreateMessage,
 } from "../utils/messageHelper.js";
 import { io } from "../socket/index.js";
@@ -56,26 +56,62 @@ export const sendDirectMessage = async (req, res) => {
     const { recipientId, content, imgUrl, conversationId, replyTo } = req.body;
     const senderId = req.user._id;
 
-    let conversation;
-
     if (!content && !imgUrl) {
       return res.status(400).json({ message: "Cần có nội dung hoặc ảnh" });
     }
 
+    let conversation;
+
     if (conversationId) {
       conversation = await Conversation.findById(conversationId);
+
+      if (!conversation) {
+        return res.status(404).json({ message: "Không tìm thấy cuộc trò chuyện" });
+      }
+
+      // 🔒 Chặn gửi tin nhắn vào conversation mà mình không phải thành viên
+      const isMember = conversation.participants.some(
+        (p) => p.userId.toString() === senderId.toString()
+      );
+      if (!isMember || conversation.type !== "direct") {
+        return res
+          .status(403)
+          .json({ message: "Bạn không có quyền gửi tin nhắn vào cuộc trò chuyện này" });
+      }
+    } else {
+      if (!recipientId) {
+        return res.status(400).json({ message: "Thiếu recipientId" });
+      }
+
+      // tránh 2 request đồng thời tạo trùng conversation cho cùng 1 cặp user
+      conversation = await Conversation.findOne({
+        type: "direct",
+        "participants.userId": { $all: [senderId, recipientId] },
+        participants: { $size: 2 },
+      });
+
+      if (!conversation) {
+        conversation = await Conversation.create({
+          type: "direct",
+          participants: [
+            { userId: senderId, joinedAt: new Date() },
+            { userId: recipientId, joinedAt: new Date() },
+          ],
+          lastMessageAt: new Date(),
+          unreadCounts: new Map(),
+        });
+      }
     }
 
-    if (!conversation) {
-      conversation = await Conversation.create({
-        type: "direct",
-        participants: [
-          { userId: senderId, joinedAt: new Date() },
-          { userId: recipientId, joinedAt: new Date() },
-        ],
-        lastMessageAt: new Date(),
-        unreadCounts: new Map(),
-      });
+    // 🔒 Nếu client gửi kèm replyTo, đảm bảo tin nhắn được reply thuộc đúng conversation này
+    if (replyTo) {
+      const repliedMessage = await Message.findById(replyTo).select("conversationId");
+      if (
+        !repliedMessage ||
+        repliedMessage.conversationId.toString() !== conversation._id.toString()
+      ) {
+        return res.status(400).json({ message: "replyTo không hợp lệ" });
+      }
     }
 
     const message = await Message.create({
@@ -105,10 +141,20 @@ export const sendGroupMessage = async (req, res) => {
   try {
     const { conversationId, content, imgUrl, replyTo } = req.body;
     const senderId = req.user._id;
-    const conversation = req.conversation;
+    const conversation = req.conversation; // gán bởi middleware kiểm tra membership trước route này
 
     if (!content && !imgUrl) {
       return res.status(400).json({ message: "Cần có nội dung hoặc ảnh" });
+    }
+
+    if (replyTo) {
+      const repliedMessage = await Message.findById(replyTo).select("conversationId");
+      if (
+        !repliedMessage ||
+        repliedMessage.conversationId.toString() !== conversationId.toString()
+      ) {
+        return res.status(400).json({ message: "replyTo không hợp lệ" });
+      }
     }
 
     const message = await Message.create({
@@ -133,10 +179,7 @@ export const sendGroupMessage = async (req, res) => {
   }
 };
 
-// 👇 MỚI THÊM: thả / đổi / gỡ reaction cho một tin nhắn
-// - Nếu user chưa có reaction trên message này -> thêm mới
-// - Nếu user đã thả cùng 1 emoji -> bấm lại để gỡ (toggle off)
-// - Nếu user đã thả emoji khác -> đổi sang emoji mới
+// thả / đổi / gỡ reaction cho một tin nhắn
 export const toggleReaction = async (req, res) => {
   try {
     const { messageId } = req.params;
@@ -175,10 +218,8 @@ export const toggleReaction = async (req, res) => {
 
     if (existingIndex !== -1) {
       if (message.reactions[existingIndex].emoji === emoji) {
-        // bấm lại cùng emoji -> gỡ reaction
         message.reactions.splice(existingIndex, 1);
       } else {
-        // đổi sang emoji khác
         message.reactions[existingIndex].emoji = emoji;
       }
     } else {

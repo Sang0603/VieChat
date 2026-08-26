@@ -140,6 +140,24 @@ export const getMessages = async (req, res) => {
   try {
     const { conversationId } = req.params;
     const { limit = 50, cursor } = req.query;
+    const userId = req.user._id;
+
+    const conversation = await Conversation.findById(conversationId).lean();
+
+    if (!conversation) {
+      return res.status(404).json({ message: "Không tìm thấy cuộc trò chuyện" });
+    }
+
+    // 🔒 Chặn đọc tin nhắn của conversation mà mình không phải thành viên
+    const isMember = (conversation.participants || []).some(
+      (p) => p.userId.toString() === userId.toString()
+    );
+
+    if (!isMember) {
+      return res
+        .status(403)
+        .json({ message: "Bạn không có quyền xem cuộc trò chuyện này" });
+    }
 
     const query = { conversationId };
 
@@ -196,6 +214,16 @@ export const markAsSeen = async (req, res) => {
       return res.status(404).json({ message: "Conversation không tồn tại" });
     }
 
+    // 🔒 Chặn mark-as-seen trên conversation mà mình không phải thành viên
+    const isMember = (conversation.participants || []).some(
+      (p) => p.userId.toString() === userId
+    );
+    if (!isMember) {
+      return res
+        .status(403)
+        .json({ message: "Bạn không có quyền thực hiện thao tác này" });
+    }
+
     const last = conversation.lastMessage;
 
     if (!last) {
@@ -231,7 +259,7 @@ export const markAsSeen = async (req, res) => {
 
     return res.status(200).json({
       message: "Marked as seen",
-      seenBy: updated?.sennBy || [],
+      seenBy: updated?.seenBy || [],
       myUnreadCount: updated?.unreadCounts[userId] || 0,
     });
   } catch (error) {

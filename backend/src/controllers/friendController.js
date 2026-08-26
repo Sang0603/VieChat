@@ -4,13 +4,41 @@ import FriendRequest from "../models/FriendRequest.js";
 import Conversation from "../models/Conversation.js";
 import { io } from "../socket/index.js";
 
+// Helper: format Date -> "dd/mm/yyyy"
+const formatDate = (date) => {
+  if (!date) return undefined;
+  const d = new Date(date);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+};
+
+// Helper: chuyển 1 User document thành profile công khai cho bạn bè xem,
+// áp dụng privacy.showPhone / privacy.showDateOfBirth
+const toFriendProfile = (user) => {
+  const showPhone = user.privacy?.showPhone !== false;
+  const showDob = user.privacy?.showDateOfBirth !== false;
+
+  return {
+    _id: user._id,
+    username: user.username,
+    displayName: user.displayName,
+    avatarUrl: user.avatarUrl,
+    bio: user.bio,
+    gender: user.gender,
+    dateOfBirth: showDob ? formatDate(user.dateOfBirth) : undefined,
+    dateOfBirthHidden: !showDob,
+    phone: showPhone ? user.phone : undefined,
+    phoneHidden: !showPhone,
+  };
+};
+
 export const sendFriendRequest = async (req, res) => {
   try {
     const { to, message } = req.body;
 
     const from = req.user._id;
 
-    if (from === to) {
+    if (from.toString() === to) {
       return res
         .status(400)
         .json({ message: "Không thể gửi lời mời kết bạn cho chính mình" });
@@ -53,8 +81,6 @@ export const sendFriendRequest = async (req, res) => {
       message,
     });
 
-    // báo realtime cho người NHẬN biết có lời mời kết bạn mới
-    // -> frontend lắng nghe event này để hiện chấm đỏ / badge thông báo ngay lập tức
     io.to(to.toString()).emit("friend-request-received", {
       request: {
         _id: request._id,
@@ -101,11 +127,6 @@ export const acceptFriendRequest = async (req, res) => {
       userB: request.to,
     });
 
-    // Tạo (hoặc tái sử dụng nếu đã có, ví dụ do từng unfriend rồi kết bạn lại)
-    // Conversation type "direct" giữa 2 người ngay khi kết bạn thành công.
-    // Vì sidebar "BẠN BÈ" ở frontend thực chất render từ useChatStore().conversations
-    // (lọc type === "direct"), nên nếu không tạo conversation ở đây, người mới kết bạn
-    // sẽ không hiện trong sidebar cho tới khi có tin nhắn đầu tiên.
     let conversation = await Conversation.findOne({
       type: "direct",
       "participants.userId": { $all: [request.from, request.to] },
@@ -122,12 +143,6 @@ export const acceptFriendRequest = async (req, res) => {
       });
     }
 
-    // QUAN TRỌNG: populate rồi FLATTEN participants[].userId thành top-level
-    // {_id, displayName, avatarUrl, joinedAt} - phải giống HỆT shape mà
-    // getConversations() và createConversation() trả về (conversationController.js).
-    // Nếu emit thẳng document Mongoose (participants[].userId lồng nhau),
-    // frontend (DirectMessageCard.tsx dùng `p._id`) sẽ không tìm thấy _id
-    // vì nó nằm trong p.userId._id, không phải p._id trực tiếp.
     await conversation.populate({
       path: "participants.userId",
       select: "displayName avatarUrl",
@@ -148,9 +163,6 @@ export const acceptFriendRequest = async (req, res) => {
       .select("_id displayName username avatarUrl")
       .lean();
 
-    // báo realtime cho người đã GỬI lời mời (A) biết là đã được chấp nhận,
-    // để A tự động thấy người này (B) xuất hiện trong danh sách bạn bè ngay,
-    // không cần load lại trang
     io.to(request.from.toString()).emit("friend-request-accepted", {
       requestId,
       friend: {
@@ -161,8 +173,6 @@ export const acceptFriendRequest = async (req, res) => {
       },
     });
 
-    // báo realtime cho chính người CHẤP NHẬN (B) nếu họ đang mở nhiều tab/thiết bị,
-    // để mọi tab đều cập nhật friend list + gỡ request khỏi danh sách chờ ngay lập tức
     io.to(request.to.toString()).emit("friend-request-accepted-self", {
       requestId,
       friend: {
@@ -173,9 +183,6 @@ export const acceptFriendRequest = async (req, res) => {
       },
     });
 
-    // báo cho cả 2 phía: có conversation mới, để frontend đẩy thẳng vào
-    // useChatStore().conversations mà không cần reload trang
-    // (dùng formattedConversation đã flatten participants ở trên, cùng shape với REST API)
     io.to(request.from.toString()).emit("conversation-created", {
       conversation: formattedConversation,
     });
@@ -229,27 +236,25 @@ export const getAllFriends = async (req, res) => {
   try {
     const userId = req.user._id;
 
+    const populateFields =
+      "_id displayName avatarUrl username bio gender dateOfBirth phone privacy";
+
     const friendships = await Friend.find({
-      $or: [
-        {
-          userA: userId,
-        },
-        {
-          userB: userId,
-        },
-      ],
+      $or: [{ userA: userId }, { userB: userId }],
     })
-      .populate("userA", "_id displayName avatarUrl username")
-      .populate("userB", "_id displayName avatarUrl username")
+      .populate("userA", populateFields)
+      .populate("userB", populateFields)
       .lean();
 
     if (!friendships.length) {
       return res.status(200).json({ friends: [] });
     }
 
-    const friends = friendships.map((f) =>
-      f.userA._id.toString() === userId.toString() ? f.userB : f.userA
-    );
+    const friends = friendships.map((f) => {
+      const rawFriend =
+        f.userA._id.toString() === userId.toString() ? f.userB : f.userA;
+      return toFriendProfile(rawFriend);
+    });
 
     return res.status(200).json({ friends });
   } catch (error) {
@@ -272,6 +277,35 @@ export const getFriendRequests = async (req, res) => {
     res.status(200).json({ sent, received });
   } catch (error) {
     console.error("Lỗi khi lấy danh sách yêu cầu kết bạn", error);
+    return res.status(500).json({ message: "Lỗi hệ thống" });
+  }
+};
+
+export const getFriendProfile = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { friendId } = req.params;
+
+    let userA = userId.toString();
+    let userB = friendId.toString();
+    if (userA > userB) [userA, userB] = [userB, userA];
+
+    const isFriend = await Friend.exists({ userA, userB });
+    if (!isFriend) {
+      return res.status(403).json({ message: "Hai người chưa là bạn bè" });
+    }
+
+    const user = await User.findById(friendId)
+      .select("_id displayName avatarUrl username bio gender dateOfBirth phone privacy")
+      .lean();
+
+    if (!user) {
+      return res.status(404).json({ message: "Không tìm thấy người dùng" });
+    }
+
+    return res.status(200).json({ friend: toFriendProfile(user) });
+  } catch (error) {
+    console.error("Lỗi khi lấy hồ sơ bạn bè", error);
     return res.status(500).json({ message: "Lỗi hệ thống" });
   }
 };

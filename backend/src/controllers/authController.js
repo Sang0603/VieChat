@@ -8,6 +8,8 @@ import Session from "../models/Session.js";
 const ACCESS_TOKEN_TTL = "30m"; // thuờng là dưới 15m
 const REFRESH_TOKEN_TTL = 14 * 24 * 60 * 60 * 1000; // 14 ngày
 
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export const signUp = async (req, res) => {
   try {
     const { username, password, email, firstName, lastName } = req.body;
@@ -16,6 +18,21 @@ export const signUp = async (req, res) => {
       return res.status(400).json({
         message: "Không thể thiếu username, password, email, firstName, và lastName",
       });
+    }
+
+    // kiểm tra kiểu dữ liệu đầu vào (tránh crash khi client gửi object/array thay vì string)
+    if (
+      typeof username !== "string" ||
+      typeof password !== "string" ||
+      typeof email !== "string" ||
+      typeof firstName !== "string" ||
+      typeof lastName !== "string"
+    ) {
+      return res.status(400).json({ message: "Dữ liệu đầu vào không hợp lệ" });
+    }
+
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ message: "Email không hợp lệ" });
     }
 
     // kiểm tra mật khẩu mạnh (bắt buộc, tránh bị bypass qua API trực tiếp)
@@ -33,6 +50,13 @@ export const signUp = async (req, res) => {
 
     if (duplicate) {
       return res.status(409).json({ message: "username đã tồn tại" });
+    }
+
+    // kiểm tra email tồn tại chưa
+    const duplicateEmail = await User.findOne({ email: email.toLowerCase().trim() });
+
+    if (duplicateEmail) {
+      return res.status(409).json({ message: "email đã được sử dụng" });
     }
 
     // mã hoá password
@@ -61,6 +85,10 @@ export const signIn = async (req, res) => {
 
     if (!username || !password) {
       return res.status(400).json({ message: "Thiếu username hoặc password." });
+    }
+
+    if (typeof username !== "string" || typeof password !== "string") {
+      return res.status(400).json({ message: "Dữ liệu đầu vào không hợp lệ" });
     }
 
     // lấy hashedPassword trong db để so với password input

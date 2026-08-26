@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { useUserStore } from "@/stores/useUserStore";
 import type { User } from "@/types/user";
 
@@ -19,12 +20,20 @@ type Props = {
   userInfo: User | null;
 };
 
+const GENDER_OPTIONS: NonNullable<User["gender"]>[] = ["Nam", "Nữ", "Khác"];
+
+const toDateInputValue = (iso?: string) => (iso ? iso.slice(0, 10) : "");
+
 const PersonalInfoForm = ({ userInfo }: Props) => {
   const updateProfile = useUserStore((s) => s.updateProfile);
 
   const [displayName, setDisplayName] = useState(userInfo?.displayName ?? "");
   const [phone, setPhone] = useState(userInfo?.phone ?? "");
   const [bio, setBio] = useState(userInfo?.bio ?? "");
+  const [gender, setGender] = useState<User["gender"] | undefined>(userInfo?.gender);
+  const [dateOfBirth, setDateOfBirth] = useState(
+    toDateInputValue(userInfo?.dateOfBirth)
+  );
   const [isSaving, setIsSaving] = useState(false);
 
   if (!userInfo) return null;
@@ -32,11 +41,13 @@ const PersonalInfoForm = ({ userInfo }: Props) => {
   const isDirty =
     displayName !== (userInfo.displayName ?? "") ||
     phone !== (userInfo.phone ?? "") ||
-    bio !== (userInfo.bio ?? "");
+    bio !== (userInfo.bio ?? "") ||
+    gender !== userInfo.gender ||
+    dateOfBirth !== toDateInputValue(userInfo.dateOfBirth);
 
   const handleSave = async () => {
     setIsSaving(true);
-    await updateProfile({ displayName, phone, bio });
+    await updateProfile({ displayName, phone, bio, gender, dateOfBirth });
     setIsSaving(false);
   };
 
@@ -89,6 +100,38 @@ const PersonalInfoForm = ({ userInfo }: Props) => {
               id="phone"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
+              className="glass-light border-border/30"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Giới tính</Label>
+            <div className="flex gap-2">
+              {GENDER_OPTIONS.map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => setGender(option)}
+                  className={cn(
+                    "flex-1 rounded-md border py-2 text-sm font-medium transition-colors glass-light border-border/30",
+                    gender === option
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "hover:bg-muted"
+                  )}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="dateOfBirth">Ngày sinh</Label>
+            <Input
+              id="dateOfBirth"
+              type="date"
+              value={dateOfBirth}
+              onChange={(e) => setDateOfBirth(e.target.value)}
               className="glass-light border-border/30"
             />
           </div>

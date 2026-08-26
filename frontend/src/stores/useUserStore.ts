@@ -45,4 +45,25 @@ export const useUserStore = create<UserState>((_set, _get) => ({
       return false;
     }
   },
+
+  updatePrivacy: async (payload) => {
+    try {
+      const { user, setUser } = useAuthStore.getState();
+      const data = await userService.updatePrivacy(payload);
+
+      if (user) {
+        setUser({
+          ...user,
+          ...data.user,
+        });
+      }
+
+      toast.success("Cập nhật quyền riêng tư thành công!");
+      return true;
+    } catch (error) {
+      console.error("Lỗi khi updatePrivacy", error);
+      toast.error("Cập nhật quyền riêng tư không thành công!");
+      return false;
+    }
+  },
 }));

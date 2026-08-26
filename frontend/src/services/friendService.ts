@@ -1,4 +1,5 @@
 import api from "@/lib/axios";
+import type { Friend } from "@/types/user";
 
 export const friendService = {
   async searchByUsername(username: string) {
@@ -24,7 +25,6 @@ export const friendService = {
   async acceptRequest(requestId: string) {
     try {
       const res = await api.post(`/friends/requests/${requestId}/accept`);
-      // backend trả về field "newFriend", không phải "requestAcceptedBy"
       return res.data.newFriend;
     } catch (error) {
       console.error("Lỗi khi gửi acceptRequest", error);
@@ -42,5 +42,10 @@ export const friendService = {
   async getFriendList() {
     const res = await api.get("/friends");
     return res.data.friends;
+  },
+
+  async getFriendProfile(friendId: string): Promise<Friend> {
+    const res = await api.get(`/friends/${friendId}/profile`);
+    return res.data.friend;
   },
 };

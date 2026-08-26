@@ -59,7 +59,6 @@ const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
                   name={otherUser?.displayName || "Moji"}
                   avatarUrl={otherUser?.avatarUrl || undefined}
                 />
-                {/* todo: socket io */}
                 <StatusBadge
                   status={
                     onlineUsers.includes(otherUser?._id ?? "") ? "online" : "offline"
@@ -110,11 +109,7 @@ const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
         <FriendProfileDialog
           open={profileOpen}
           onOpenChange={setProfileOpen}
-          friend={{
-            id: otherUser._id,
-            fullName: otherUser.displayName,
-            avatarUrl: otherUser.avatarUrl || undefined,
-          }}
+          friendId={otherUser._id}
         />
       )}
     </header>

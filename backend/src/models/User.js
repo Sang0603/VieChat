@@ -26,18 +26,29 @@ const userSchema = new mongoose.Schema(
       trim: true,
     },
     avatarUrl: {
-      type: String, // link CDN để hiển thị hình
+      type: String,
     },
     avatarId: {
-      type: String, // Cloudinary public_id để xoá hình
+      type: String,
     },
     bio: {
       type: String,
-      maxlength: 500, // tuỳ
+      maxlength: 500,
     },
     phone: {
       type: String,
-      sparse: true, // cho phép null, nhưng không được trùng
+      sparse: true,
+    },
+    gender: {
+      type: String,
+      enum: ["Nam", "Nữ", "Khác"],
+    },
+    dateOfBirth: {
+      type: Date,
+    },
+    privacy: {
+      showPhone: { type: Boolean, default: true },
+      showDateOfBirth: { type: Boolean, default: true },
     },
   },
   {

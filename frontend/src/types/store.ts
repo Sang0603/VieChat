@@ -1,7 +1,7 @@
 import type { Socket } from "socket.io-client";
-import type { Conversation, Message, MessageReaction, ReplyPreview } from "./chat"; // 👈 thêm MessageReaction
+import type { Conversation, Message, MessageReaction, ReplyPreview } from "./chat";
 import type { Friend, FriendRequest, User } from "./user";
-import type { UpdateProfilePayload } from "@/services/userService";
+import type { UpdateProfilePayload, UpdatePrivacyPayload } from "@/services/userService";
 
 export interface AuthState {
   accessToken: string | null;
@@ -61,9 +61,9 @@ export interface ChatState {
   // add message
   addMessage: (message: Message) => Promise<void>;
   // update convo
- updateConversation: (
-  conversation: Partial<Conversation> & { _id: string }
-) => void;
+  updateConversation: (
+    conversation: Partial<Conversation> & { _id: string }
+  ) => void;
   markAsSeen: () => Promise<void>;
   addConvo: (convo: Conversation) => void;
   createConversation: (
@@ -115,4 +115,5 @@ export interface FriendState {
 export interface UserState {
   updateAvatarUrl: (formData: FormData) => Promise<void>;
   updateProfile: (payload: UpdateProfilePayload) => Promise<boolean>;
+  updatePrivacy: (payload: UpdatePrivacyPayload) => Promise<boolean>;
 }
