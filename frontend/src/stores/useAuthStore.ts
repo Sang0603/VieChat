@@ -56,9 +56,15 @@ export const useAuthStore = create<AuthState>()(
           useSocketStore.getState().connectSocket();
 
           toast.success("Chào mừng bạn quay lại với VieChat 🎉");
+          return true;
         } catch (error) {
           console.error(error);
-          toast.error("Đăng nhập không thành công!");
+          // lấy message thật từ server: 401 sai username/password, 429 rate limit,...
+          const message =
+            (error as { response?: { data?: { message?: string } } })?.response?.data
+              ?.message ?? "Đăng nhập không thành công!";
+          toast.error(message);
+          return false;
         } finally {
           set({ loading: false });
         }
