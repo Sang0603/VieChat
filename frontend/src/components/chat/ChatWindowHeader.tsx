@@ -37,15 +37,11 @@ const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
     if (!user || !otherUser) return;
   }
 
-  // 👇 MỚI THÊM: danh sách người đang gõ trong conversation này, trừ chính mình
-  // (thực ra server đã tự loại trừ mình qua socket.to(), nhưng lọc lại cho chắc)
   const currentTypers = (typingUsers[chat._id] ?? []).filter(
     (t) => t.userId !== user?._id
   );
   const isTyping = currentTypers.length > 0;
 
-  // 👇 MỚI THÊM: build text hiển thị - direct chat chỉ có 1 người nên luôn là
-  // "Đang nhập...", group chat thì show tên (hoặc "X người đang nhập..." nếu nhiều)
   const getTypingText = () => {
     if (chat!.type === "direct") return "Đang nhập...";
 
@@ -69,13 +65,12 @@ const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
             chat.type === "direct" ? "cursor-pointer" : "cursor-default"
           }`}
         >
-          {/* avatar */}
           <div className="relative">
             {chat.type === "direct" ? (
               <>
                 <UserAvatar
                   type={"sidebar"}
-                  name={otherUser?.displayName || "Moji"}
+                  name={otherUser?.displayName || "VieChat"}
                   avatarUrl={otherUser?.avatarUrl || undefined}
                 />
                 <StatusBadge
@@ -92,12 +87,10 @@ const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
             )}
           </div>
 
-          {/* name + typing indicator */}
           <div className="min-w-0">
             <h2 className="font-semibold text-foreground truncate">
               {chat.type === "direct" ? otherUser?.displayName : chat.group?.name}
             </h2>
-            {/* 👇 MỚI THÊM */}
             {isTyping && (
               <p className="text-xs text-primary truncate animate-pulse">
                 {getTypingText()}
@@ -106,7 +99,6 @@ const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
           </div>
         </button>
 
-        {/* nút gọi thoại + gọi video + nút mở panel - chỉ hiện với chat 1-1, chưa hỗ trợ gọi nhóm */}
         <div className="ml-auto flex items-center gap-1">
           {chat.type === "direct" && otherUser && (
             <>

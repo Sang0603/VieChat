@@ -1,8 +1,10 @@
 import { useChatStore } from "@/stores/useChatStore";
 import ChatWelcomeScreen from "./ChatWelcomeScreen";
 import MessageItem from "./MessageItem";
+import TypingBubble from "./TypingBubble";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import InfiniteScroll from "react-infinite-scroll-component";
+import { useAuthStore } from "@/stores/useAuthStore";
 
 const ChatWindowBody = () => {
   const {
@@ -10,7 +12,9 @@ const ChatWindowBody = () => {
     conversations,
     messages: allMessages,
     fetchMessages,
+    typingUsers,
   } = useChatStore();
+  const { user } = useAuthStore();
   const [lastMessageStatus, setLastMessageStatus] = useState<"delivered" | "seen">(
     "delivered"
   );
@@ -20,6 +24,15 @@ const ChatWindowBody = () => {
   const hasMore = allMessages[activeConversationId!]?.hasMore ?? false;
   const selectedConvo = conversations.find((c) => c._id === activeConversationId);
   const key = `chat-scroll-${activeConversationId}`;
+
+  const currentTypers = (
+    activeConversationId ? typingUsers[activeConversationId] ?? [] : []
+  ).filter((t) => t.userId !== user?._id);
+
+  const typingOtherUser =
+    selectedConvo?.type === "direct"
+      ? selectedConvo.participants.find((p) => p._id === currentTypers[0]?.userId)
+      : undefined;
 
   // ref
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -103,7 +116,7 @@ const ChatWindowBody = () => {
         id="scrollableDiv"
         ref={containerRef}
         onScroll={handleScrollSave}
-        className="flex flex-col-reverse overflow-y-auto overflow-x-hidden beautiful-scrollbar"
+        className="flex flex-col-reverse overflow-y-auto overflow-x-hidden beautiful-scrollbar flex-1"
       >
         <div ref={messagesEndRef}></div>
         <InfiniteScroll
@@ -131,6 +144,21 @@ const ChatWindowBody = () => {
           ))}
         </InfiniteScroll>
       </div>
+
+      {currentTypers.length > 0 && (
+        <div className="shrink-0">
+          <TypingBubble
+            name={
+              selectedConvo.type === "direct"
+                ? typingOtherUser?.displayName
+                : currentTypers[0].displayName
+            }
+            avatarUrl={
+              selectedConvo.type === "direct" ? typingOtherUser?.avatarUrl : undefined
+            }
+          />
+        </div>
+      )}
     </div>
   );
 };
