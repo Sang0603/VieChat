@@ -7,6 +7,9 @@ import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import SidebarSearchBar from "../chat/SidebarSearchBar";
 import GroupChatList from "../chat/GroupChatList";
@@ -14,6 +17,8 @@ import DirectMessageList from "../chat/DirectMessageList";
 import { useAuthStore } from "@/stores/useAuthStore";
 import ConversationSkeleton from "../skeleton/ConversationSkeleton";
 import { useChatStore } from "@/stores/useChatStore";
+import { ShieldCheck } from "lucide-react"; // 👈 mới thêm
+import { Link } from "react-router"; // 👈 mới thêm
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { user } = useAuthStore();
@@ -36,6 +41,24 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             />
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {/* 👇 MỚI THÊM: chỉ hiện khi user.role === "admin" */}
+        {user?.role === "admin" && (
+          <SidebarGroup>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild>
+                    <Link to="/admin">
+                      <ShieldCheck />
+                      <span>Quản trị</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
         {/* Group Chat */}
         <SidebarGroup>

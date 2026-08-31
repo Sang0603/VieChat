@@ -67,4 +67,10 @@ io.on("connection", async (socket) => {
   });
 });
 
+// 👇 MỚI THÊM: helper cho adminController lấy số user đang online
+// (dùng chung onlineUsers Map đang track ở trên, không cần DB field riêng)
+export function getOnlineUserCount() {
+  return onlineUsers.size;
+}
+
 export { io, app, server };

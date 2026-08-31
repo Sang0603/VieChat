@@ -4,6 +4,8 @@ import ChatAppPage from "./pages/ChatAppPage";
 import { Toaster } from "sonner";
 import SignUpPage from "./pages/SignUpPage";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
+import AdminRoute from "./components/auth/AdminRoute"; // 👈 mới thêm
+import AdminDashboardPage from "./pages/AdminDashboardPage"; // 👈 mới thêm
 import { useThemeStore } from "./stores/useThemeStore";
 import { useEffect } from "react";
 import { useAuthStore } from "./stores/useAuthStore";
@@ -64,6 +66,14 @@ function App() {
               path="/"
               element={<ChatAppPage />}
             />
+
+            {/* 👇 mới thêm: chỉ admin mới vào được */}
+            <Route element={<AdminRoute />}>
+              <Route
+                path="/admin"
+                element={<AdminDashboardPage />}
+              />
+            </Route>
           </Route>
         </Routes>
       </BrowserRouter>

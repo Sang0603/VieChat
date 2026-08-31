@@ -50,6 +50,12 @@ const userSchema = new mongoose.Schema(
       showPhone: { type: Boolean, default: true },
       showDateOfBirth: { type: Boolean, default: true },
     },
+    // 👇 MỚI THÊM: phân quyền
+    role: {
+      type: String,
+      enum: ["user", "admin"],
+      default: "user",
+    },
   },
   {
     timestamps: true,

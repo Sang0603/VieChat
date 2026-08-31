@@ -14,6 +14,7 @@ export interface User {
   gender?: "Nam" | "Nữ" | "Khác";
   dateOfBirth?: string; // ISO string, dùng để đổ vào <input type="date">
   privacy?: UserPrivacy;
+  role?: "user" | "admin"; // 👈 mới thêm — optional để không phá code cũ nếu backend cũ chưa trả field này
   createdAt?: string;
   updatedAt?: string;
 }
