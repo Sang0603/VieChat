@@ -34,7 +34,11 @@ export function SigninForm({ className, ...props }: React.ComponentProps<"div">)
     const { username, password } = data;
     const success = await signIn(username, password);
     if (success) {
-      navigate("/");
+      // signIn() đã gọi fetchMe() bên trong nên lúc này store đã có user mới
+      // nhất. Đọc trực tiếp qua getState() để chắc chắn lấy giá trị vừa cập
+      // nhật (không dùng biến từ hook lúc component mount, có thể còn cũ/null).
+      const role = useAuthStore.getState().user?.role;
+      navigate(role === "admin" ? "/admin" : "/");
     }
   };
 

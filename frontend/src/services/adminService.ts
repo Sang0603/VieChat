@@ -5,6 +5,15 @@ export interface AdminOverviewStats {
   onlineUsers: number;
   totalMessages: number;
   todayMessages: number;
+  // 👇 MỚI THÊM — khớp với adminController.getOverviewStats() đã cập nhật
+  totalRooms: number;
+  sharedFiles: number;
+  totalCalls: number;
+  completedCalls: number;
+  avgCallDurationSec: number;
+  totalUsersTrendPct: number;
+  totalMessagesTrendPct: number;
+  todayMessagesTrendPct: number;
 }
 
 export interface AdminDailyPoint {

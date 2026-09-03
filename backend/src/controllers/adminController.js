@@ -1,7 +1,15 @@
 // backend/src/controllers/adminController.js
 import User from "../models/User.js";
 import Message from "../models/Message.js";
+import Conversation from "../models/Conversation.js";
 import { getOnlineUserCount } from "../socket/index.js";
+
+// Múi giờ dùng thống nhất cho toàn bộ thống kê theo ngày. Trước đây Mongo
+// $dateToString mặc định group theo UTC, còn JS side lấy key bằng
+// toISOString().slice(0,10) (cũng là UTC nhưng từ 1 local-midnight Date) —
+// hai bên lệch nhau múi giờ +7, khiến dữ liệu tối hôm trước (giờ VN) bị gộp
+// nhầm sang cột "hôm nay". Giờ cả hai bên đều dùng cùng 1 timezone cố định.
+const TZ = "Asia/Ho_Chi_Minh";
 
 function lastNDays(n) {
   const days = [];
@@ -19,20 +27,105 @@ function fmtLabel(d) {
   return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
+// Trả về key "YYYY-MM-DD" theo local time (server chạy giờ VN), PHẢI khớp
+// với key mà $dateToString bên Mongo trả về (có truyền timezone: TZ).
+// Không dùng toISOString() ở đây vì nó luôn quy đổi ra UTC.
+function localDateKey(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+// so sánh % giữa 2 kỳ, tránh chia cho 0
+function pctChange(curr, prev) {
+  if (prev === 0) return curr > 0 ? 100 : 0;
+  return Math.round(((curr - prev) / prev) * 100);
+}
+
 // GET /api/admin/stats
 export const getOverviewStats = async (req, res) => {
   try {
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
 
-    const [totalUsers, totalMessages, todayMessages] = await Promise.all([
+    const startOfYesterday = new Date(startOfToday);
+    startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+
+    const sevenDaysAgo = new Date(startOfToday);
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    const fourteenDaysAgo = new Date(startOfToday);
+    fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+
+    const [
+      totalUsers,
+      totalMessages,
+      todayMessages,
+      yesterdayMessages,
+      totalRooms,
+      sharedFiles,
+      callAgg,
+      usersLast7,
+      usersPrev7,
+      msgsLast7,
+      msgsPrev7,
+    ] = await Promise.all([
       User.countDocuments(),
       Message.countDocuments(),
       Message.countDocuments({ createdAt: { $gte: startOfToday } }),
+      Message.countDocuments({ createdAt: { $gte: startOfYesterday, $lt: startOfToday } }),
+      Conversation.countDocuments(),
+      Message.countDocuments({ imgUrl: { $ne: null } }),
+      Message.aggregate([
+        { $match: { type: "call" } },
+        {
+          $group: {
+            _id: null,
+            totalCalls: { $sum: 1 },
+            completedCalls: {
+              $sum: { $cond: [{ $eq: ["$callInfo.status", "completed"] }, 1, 0] },
+            },
+            completedDurationSum: {
+              $sum: {
+                $cond: [
+                  { $eq: ["$callInfo.status", "completed"] },
+                  "$callInfo.durationInSeconds",
+                  0,
+                ],
+              },
+            },
+          },
+        },
+      ]),
+      User.countDocuments({ createdAt: { $gte: sevenDaysAgo } }),
+      User.countDocuments({ createdAt: { $gte: fourteenDaysAgo, $lt: sevenDaysAgo } }),
+      Message.countDocuments({ createdAt: { $gte: sevenDaysAgo } }),
+      Message.countDocuments({ createdAt: { $gte: fourteenDaysAgo, $lt: sevenDaysAgo } }),
     ]);
+
     const onlineUsers = getOnlineUserCount();
 
-    res.json({ totalUsers, onlineUsers, totalMessages, todayMessages });
+    const totalCalls = callAgg[0]?.totalCalls || 0;
+    const completedCalls = callAgg[0]?.completedCalls || 0;
+    const avgCallDurationSec = completedCalls
+      ? Math.round(callAgg[0].completedDurationSum / completedCalls)
+      : 0;
+
+    res.json({
+      totalUsers,
+      onlineUsers,
+      totalMessages,
+      todayMessages,
+      totalRooms,
+      sharedFiles,
+      totalCalls,
+      completedCalls,
+      avgCallDurationSec,
+      totalUsersTrendPct: pctChange(usersLast7, usersPrev7),
+      totalMessagesTrendPct: pctChange(msgsLast7, msgsPrev7),
+      todayMessagesTrendPct: pctChange(todayMessages, yesterdayMessages),
+    });
   } catch (error) {
     console.error("Lỗi getOverviewStats", error);
     res.status(500).json({ message: "Lỗi lấy thống kê tổng quan" });
@@ -51,7 +144,7 @@ export const getRegistrationsByDay = async (req, res) => {
       { $match: { createdAt: { $gte: since } } },
       {
         $group: {
-          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: TZ } },
           count: { $sum: 1 },
         },
       },
@@ -60,7 +153,7 @@ export const getRegistrationsByDay = async (req, res) => {
 
     const result = lastNDays(days).map((d) => ({
       date: fmtLabel(d),
-      value: map.get(d.toISOString().slice(0, 10)) || 0,
+      value: map.get(localDateKey(d)) || 0,
     }));
 
     res.json(result);
@@ -82,7 +175,7 @@ export const getMessagesByDay = async (req, res) => {
       { $match: { createdAt: { $gte: since } } },
       {
         $group: {
-          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: TZ } },
           count: { $sum: 1 },
         },
       },
@@ -91,7 +184,7 @@ export const getMessagesByDay = async (req, res) => {
 
     const result = lastNDays(days).map((d) => ({
       date: fmtLabel(d),
-      value: map.get(d.toISOString().slice(0, 10)) || 0,
+      value: map.get(localDateKey(d)) || 0,
     }));
 
     res.json(result);
@@ -125,17 +218,27 @@ export const getActivityStats = async (req, res) => {
     const [msgRows, userRows, activeRows] = await Promise.all([
       Message.aggregate([
         { $match: { createdAt: { $gte: since } } },
-        { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }, count: { $sum: 1 } } },
+        {
+          $group: {
+            _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: TZ } },
+            count: { $sum: 1 },
+          },
+        },
       ]),
       User.aggregate([
         { $match: { createdAt: { $gte: since } } },
-        { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }, count: { $sum: 1 } } },
+        {
+          $group: {
+            _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: TZ } },
+            count: { $sum: 1 },
+          },
+        },
       ]),
       Message.aggregate([
         { $match: { createdAt: { $gte: since } } },
         {
           $group: {
-            _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+            _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: TZ } },
             senders: { $addToSet: "$senderId" },
           },
         },
@@ -148,7 +251,7 @@ export const getActivityStats = async (req, res) => {
     const activeMap = new Map(activeRows.map((r) => [r._id, r.count]));
 
     const result = lastNDays(days).map((d) => {
-      const key = d.toISOString().slice(0, 10);
+      const key = localDateKey(d);
       return {
         date: fmtLabel(d),
         messages: msgMap.get(key) || 0,
