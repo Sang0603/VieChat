@@ -116,6 +116,17 @@ export const useSocketStore = create<SocketState>((set, get) => ({
     });
     // ==================== HẾT PHẦN FRIEND REMOVED ====================
 
+    // ==================== 👇 MỚI THÊM: BLOCK STATUS REALTIME ====================
+    // báo real-time cho phía BỊ chặn / vừa được bỏ chặn, không cần load lại trang
+    socket.on("user-blocked", ({ by }) => {
+      useFriendStore.getState().setBlockedByOther(by, true);
+    });
+
+    socket.on("user-unblocked", ({ by }) => {
+      useFriendStore.getState().setBlockedByOther(by, false);
+    });
+    // ==================== HẾT PHẦN BLOCK STATUS REALTIME ====================
+
     // ==================== TYPING INDICATOR ====================
     socket.on("typing:start", ({ conversationId, userId, displayName }) => {
       useChatStore.getState().setUserTyping(conversationId, { userId, displayName }, true);

@@ -20,6 +20,8 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
     useChatStore();
   const { startTyping, stopTyping } = useSocketStore();
   const blockedFriendIds = useFriendStore((s) => s.blockedFriendIds);
+  const blockedMeIds = useFriendStore((s) => s.blockedMeIds); // 👇 MỚI THÊM
+  const checkBlockStatus = useFriendStore((s) => s.checkBlockStatus); // 👇 MỚI THÊM
   const [value, setValue] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -27,12 +29,12 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 👇 MỚI THÊM: theo dõi trạng thái "đang gõ" cục bộ ở client, tránh
+  // 👇 theo dõi trạng thái "đang gõ" cục bộ ở client, tránh
   // spam emit typing:start liên tục mỗi lần gõ 1 ký tự
   const isTypingRef = useRef(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 👇 MỚI THÊM: khi chuyển sang conversation khác hoặc component unmount,
+  // 👇 khi chuyển sang conversation khác hoặc component unmount,
   // đảm bảo báo "ngừng gõ" cho conversation cũ để không bị kẹt trạng thái
   // "Đang nhập..." bên phía người kia
   useEffect(() => {
@@ -46,16 +48,29 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedConvo._id]);
 
-  if (!user) return;
-
-  // 👇 MỚI THÊM: nếu là chat direct với người mình đã chặn -> khoá hẳn ô nhập
   const otherUser =
     selectedConvo.type === "direct"
-      ? selectedConvo.participants.find((p) => p._id !== user._id)
+      ? selectedConvo.participants.find((p) => p._id !== user?._id)
       : undefined;
-  const isBlocked = Boolean(otherUser && blockedFriendIds.includes(otherUser._id));
 
-  // 👇 MỚI THÊM: gọi mỗi khi nội dung input thay đổi
+  // 👇 MỚI THÊM: mỗi lần mở đoạn chat 1-1, đồng bộ lại trạng thái chặn thật
+  // sự từ server (phòng trường hợp lỡ socket event lúc offline / vừa reload trang)
+  useEffect(() => {
+    if (otherUser) {
+      checkBlockStatus(otherUser._id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [otherUser?._id]);
+
+  if (!user) return;
+
+  // 👇 nếu là chat direct với người mình đã chặn -> khoá hẳn ô nhập
+  const isBlockedByMe = Boolean(otherUser && blockedFriendIds.includes(otherUser._id));
+  // 👇 MỚI THÊM: nếu chat direct với người ĐANG chặn mình -> cũng khoá ô nhập
+  const isBlockedByOther = Boolean(otherUser && blockedMeIds.includes(otherUser._id));
+  const isBlocked = isBlockedByMe || isBlockedByOther;
+
+  // 👇 gọi mỗi khi nội dung input thay đổi
   const handleTypingSignal = () => {
     if (!isTypingRef.current) {
       isTypingRef.current = true;
@@ -70,7 +85,7 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
     }, TYPING_STOP_DELAY);
   };
 
-  // 👇 MỚI THÊM: dừng ngay lập tức khi gửi tin (không cần đợi hết 2s)
+  // 👇 dừng ngay lập tức khi gửi tin (không cần đợi hết 2s)
   const stopTypingImmediately = () => {
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     if (isTypingRef.current) {
@@ -110,7 +125,7 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
   };
 
   const sendMessage = async () => {
-    if (isBlocked) return; // 👈 MỚI THÊM: chặn cứng ở phía client, không gọi API nữa
+    if (isBlocked) return; // chặn cứng ở phía client, không gọi API nữa
 
     const trimmed = value.trim();
     if (!trimmed && !imageFile) return;
@@ -124,7 +139,7 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
     setValue("");
     clearImage();
     clearReplyingTo();
-    stopTypingImmediately(); // 👈 MỚI THÊM
+    stopTypingImmediately();
     setSending(true);
 
     try {
@@ -136,13 +151,8 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
 
       if (selectedConvo.type === "direct") {
         const participants = selectedConvo.participants;
-        const otherUser = participants.filter((p) => p._id !== user._id)[0];
-        await sendDirectMessage(
-          otherUser._id,
-          currValue,
-          imgUrl,
-          currReplyTo?._id
-        );
+        const other = participants.filter((p) => p._id !== user._id)[0];
+        await sendDirectMessage(other._id, currValue, imgUrl, currReplyTo?._id);
       } else {
         await sendGroupMessage(
           selectedConvo._id,
@@ -151,8 +161,20 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
           currReplyTo?._id
         );
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
+
+      // 👇 MỚI THÊM: backend từ chối vì đang bị chặn (race condition, ví dụ
+      // họ vừa chặn mình ngay lúc mình đang gõ, socket event chưa kịp tới)
+      // -> đồng bộ lại state ngay, banner sẽ tự hiện, không khôi phục nội dung
+      if (error?.response?.status === 403 && error?.response?.data?.blocked) {
+        if (otherUser) checkBlockStatus(otherUser._id);
+        toast.error(
+          error.response.data.message ?? "Không thể gửi tin nhắn cho người này"
+        );
+        return;
+      }
+
       toast.error("Lỗi xảy ra khi gửi tin nhắn. Bạn hãy thử lại!");
       // khôi phục lại nội dung để người dùng không mất tin nhắn khi lỗi
       setValue(currValue);
@@ -175,18 +197,27 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
     }
   };
 
-  // 👇 MỚI THÊM: gộp việc setValue + báo hiệu đang gõ vào 1 chỗ
+  // 👇 gộp việc setValue + báo hiệu đang gõ vào 1 chỗ
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setValue(e.target.value);
     handleTypingSignal();
   };
 
-  // 👇 MỚI THÊM: giao diện khoá hẳn khi đã chặn, không cho thao tác gì
-  if (isBlocked) {
+  // 👇 MỚI THÊM: 2 banner khác nhau tuỳ hướng chặn, giống Zalo
+  if (isBlockedByMe) {
     return (
       <div className="flex items-center justify-center gap-2 p-3 min-h-[56px] bg-muted/40 border-t border-border/50 text-sm text-muted-foreground">
         <ShieldBan className="size-4" />
         Bạn đã chặn người này. Bỏ chặn trong phần Cài đặt để nhắn tin trở lại.
+      </div>
+    );
+  }
+
+  if (isBlockedByOther) {
+    return (
+      <div className="flex items-center justify-center gap-2 p-3 min-h-[56px] bg-muted/40 border-t border-border/50 text-sm text-muted-foreground">
+        <ShieldBan className="size-4" />
+        Bạn đã bị người này chặn. Không thể gửi tin nhắn.
       </div>
     );
   }

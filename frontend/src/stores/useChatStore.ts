@@ -91,44 +91,35 @@ export const useChatStore = create<ChatState>()(
           set({ messageLoading: false });
         }
       },
+      // 👇 SỬA: backend không còn trả tin giả khi bị chặn, mà trả lỗi 403
+      // ({ blocked: true, blockedByMe, blockedMe }) -> ném lại lỗi để
+      // MessageInput bắt được, đồng bộ lại trạng thái chặn và khôi phục nội
+      // dung tin nhắn cho người dùng gõ lại (không optimistic-add nữa)
       sendDirectMessage: async (recipientId, content, imgUrl, replyTo) => {
-        try {
-          const { activeConversationId } = get();
-          const message = await chatService.sendDirectMessage(
-            recipientId,
-            content,
-            imgUrl,
-            activeConversationId || undefined,
-            replyTo
-          );
+        const { activeConversationId } = get();
+        const message = await chatService.sendDirectMessage(
+          recipientId,
+          content,
+          imgUrl,
+          activeConversationId || undefined,
+          replyTo
+        );
 
-          // 👇 MỚI THÊM: nếu bị chặn, backend trả về tin giả (không lưu DB,
-          // không emit socket) -> tự thêm vào state ở đây để CHÍNH người gửi
-          // thấy tin mình vừa gõ + dòng cảnh báo, người kia không nhận được gì.
-          if (message?.blocked) {
-            await get().addMessage(message);
-          }
+        set((state) => ({
+          conversations: state.conversations.map((c) =>
+            c._id === activeConversationId ? { ...c, seenBy: [] } : c
+          ),
+        }));
 
-          set((state) => ({
-            conversations: state.conversations.map((c) =>
-              c._id === activeConversationId ? { ...c, seenBy: [] } : c
-            ),
-          }));
-        } catch (error) {
-          console.error("Lỗi xảy ra khi gửi direct message", error);
-        }
+        return message;
       },
       sendGroupMessage: async (conversationId, content, imgUrl, replyTo) => {
-        try {
-          await chatService.sendGroupMessage(conversationId, content, imgUrl, replyTo);
-          set((state) => ({
-            conversations: state.conversations.map((c) =>
-              c._id === get().activeConversationId ? { ...c, seenBy: [] } : c
-            ),
-          }));
-        } catch (error) {
-          console.error("Lỗi xảy ra gửi group message", error);
-        }
+        await chatService.sendGroupMessage(conversationId, content, imgUrl, replyTo);
+        set((state) => ({
+          conversations: state.conversations.map((c) =>
+            c._id === get().activeConversationId ? { ...c, seenBy: [] } : c
+          ),
+        }));
       },
       addMessage: async (message) => {
         try {

@@ -17,7 +17,7 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// 👇 MỚI THÊM: khi nhiều request cùng 403 một lúc (token vừa hết hạn giữa lúc
+// 👇 khi nhiều request cùng 403 một lúc (token vừa hết hạn giữa lúc
 // trang đang bắn nhiều API), chỉ gọi /auth/refresh MỘT LẦN DUY NHẤT, các
 // request còn lại xếp hàng đợi kết quả của lần refresh đó rồi retry lại -
 // tránh gọi refresh dồn dập (dính rate limit 429) hoặc đua nhau dùng refresh
@@ -49,10 +49,18 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
+    // 👇 MỚI THÊM: 403 do bị CHẶN (gửi tin nhắn cho người đã chặn/bị chặn)
+    // không liên quan gì tới access token hết hạn - không được đi vào luồng
+    // refresh, nếu không sẽ tốn 1 vòng gọi /auth/refresh vô ích và làm chậm
+    // phản hồi lỗi "bị chặn" xuống cho UI.
+    if (error.response?.status === 403 && error.response?.data?.blocked) {
+      return Promise.reject(error);
+    }
+
     if (error.response?.status === 403 && !originalRequest._retry) {
       originalRequest._retry = true;
 
-      // 👇 MỚI THÊM: nếu đã có 1 request khác đang refresh rồi, không gọi
+      // 👇 nếu đã có 1 request khác đang refresh rồi, không gọi
       // thêm nữa - đứng vào hàng đợi, khi nào refresh xong thì retry
       if (isRefreshing) {
         return new Promise((resolve, reject) => {

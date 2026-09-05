@@ -10,6 +10,7 @@ export const useFriendStore = create<FriendState>((set, _get) => ({
   unreadRequestCount: 0,
   blockedUsers: [],
   blockedFriendIds: [],
+  blockedMeIds: [], // 👇 MỚI THÊM: danh sách người ĐANG chặn mình
   searchByUsername: async (username) => {
     try {
       set({ loading: true });
@@ -197,18 +198,34 @@ export const useFriendStore = create<FriendState>((set, _get) => ({
   },
   checkBlockStatus: async (friendId) => {
     try {
-      const { blockedByMe } = await friendService.getBlockStatus(friendId);
+      const { blockedByMe, blockedMe } = await friendService.getBlockStatus(friendId);
       set((state) => ({
         blockedFriendIds: blockedByMe
           ? state.blockedFriendIds.includes(friendId)
             ? state.blockedFriendIds
             : [...state.blockedFriendIds, friendId]
           : state.blockedFriendIds.filter((id) => id !== friendId),
+        // 👇 MỚI THÊM: đồng bộ luôn chiều "họ chặn mình"
+        blockedMeIds: blockedMe
+          ? state.blockedMeIds.includes(friendId)
+            ? state.blockedMeIds
+            : [...state.blockedMeIds, friendId]
+          : state.blockedMeIds.filter((id) => id !== friendId),
       }));
       return blockedByMe;
     } catch (error) {
       console.error("Lỗi xảy ra khi checkBlockStatus", error);
       return false;
     }
+  },
+  // 👇 MỚI THÊM: gọi khi socket báo "user-blocked" / "user-unblocked"
+  setBlockedByOther: (userId, blocked) => {
+    set((state) => ({
+      blockedMeIds: blocked
+        ? state.blockedMeIds.includes(userId)
+          ? state.blockedMeIds
+          : [...state.blockedMeIds, userId]
+        : state.blockedMeIds.filter((id) => id !== userId),
+    }));
   },
 }));

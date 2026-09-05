@@ -8,6 +8,7 @@ import UserAvatar from "./UserAvatar";
 import StatusBadge from "./StatusBadge";
 import UnreadCountBadge from "./UnreadCountBadge";
 import { useSocketStore } from "@/stores/useSocketStore";
+import { useFriendStore } from "@/stores/useFriendStore";
 import FriendProfileDialog from "./FriendProfileDialog";
 
 const DirectMessageCard = ({ convo }: { convo: Conversation }) => {
@@ -97,6 +98,11 @@ const DirectMessageCard = ({ convo }: { convo: Conversation }) => {
           handleSelectConversation(convo._id);
           setProfileOpen(false);
         }}
+        // 👇 MỚI THÊM: trước đây thiếu 2 dòng này -> bấm "Chặn tin nhắn và
+        // cuộc gọi" / "Xóa khỏi danh sách bạn bè" từ avatar trong sidebar
+        // không gọi API thật, dialog tự đóng như đã thành công (bug)
+        onBlock={(friendId) => useFriendStore.getState().blockFriend(friendId)}
+        onUnfriend={(friendId) => useFriendStore.getState().unfriend(friendId)}
       />
     </>
   );

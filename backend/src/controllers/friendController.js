@@ -370,6 +370,9 @@ export const blockFriend = async (req, res) => {
     io.to(friendId.toString()).emit("friend-removed", { friendId: userId });
     io.to(userId.toString()).emit("friend-removed", { friendId });
 
+    // 👇 MỚI THÊM: báo real-time cho người BỊ chặn biết ngay, không cần load lại trang
+    io.to(friendId.toString()).emit("user-blocked", { by: userId });
+
     return res.status(200).json({ message: "Đã chặn người dùng" });
   } catch (error) {
     console.error("Lỗi khi chặn bạn bè", error);
@@ -438,6 +441,9 @@ export const unblockUser = async (req, res) => {
     if (result.deletedCount === 0) {
       return res.status(404).json({ message: "Người dùng này chưa bị chặn" });
     }
+
+    // 👇 MỚI THÊM: báo real-time cho người vừa được bỏ chặn
+    io.to(targetUserId.toString()).emit("user-unblocked", { by: userId });
 
     return res.status(200).json({ message: "Đã bỏ chặn người dùng" });
   } catch (error) {

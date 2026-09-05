@@ -55,12 +55,14 @@ export interface ChatState {
   clearReplyingTo: () => void;
   fetchConversations: () => Promise<void>;
   fetchMessages: (conversationId?: string) => Promise<void>;
+  // 👇 SỬA: giờ trả về message vừa gửi (backend không còn "giả vờ thành công"
+  // khi bị chặn - lỗi 403 blocked sẽ ném ra ngoài để nơi gọi tự bắt)
   sendDirectMessage: (
     recipientId: string,
     content: string,
     imgUrl?: string,
     replyTo?: string
-  ) => Promise<void>;
+  ) => Promise<Message>;
   sendGroupMessage: (
     conversationId: string,
     content: string,
@@ -129,6 +131,8 @@ export interface FriendState {
   blockedUsers: BlockedUser[];
   // 👇 MỚI THÊM: danh sách id bạn bè mà MÌNH đã chặn (dùng để disable chat realtime)
   blockedFriendIds: string[];
+  // 👇 MỚI THÊM: danh sách id người ĐANG chặn mình (để hiện banner "bạn đã bị chặn")
+  blockedMeIds: string[];
   searchByUsername: (username: string) => Promise<User | null>;
   addFriend: (to: string, message?: string) => Promise<string>;
   getAllFriendRequests: () => Promise<void>;
@@ -153,8 +157,12 @@ export interface FriendState {
   getBlockedUsers: () => Promise<void>;
   // 👇 MỚI THÊM: bỏ chặn 1 người
   unblockUser: (userId: string) => Promise<boolean>;
-  // 👇 MỚI THÊM: kiểm tra + đồng bộ trạng thái chặn của 1 friendId vào blockedFriendIds
+  // 👇 MỚI THÊM: kiểm tra + đồng bộ trạng thái chặn của 1 friendId (cả 2 chiều)
+  // vào blockedFriendIds / blockedMeIds
   checkBlockStatus: (friendId: string) => Promise<boolean>;
+  // 👇 MỚI THÊM: gọi khi socket báo "user-blocked" / "user-unblocked" - cập
+  // nhật chiều "người khác chặn/bỏ chặn mình"
+  setBlockedByOther: (userId: string, blocked: boolean) => void;
 }
 
 export interface UserState {

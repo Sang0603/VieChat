@@ -29,17 +29,6 @@ export const uploadChatImage = async (req, res) => {
   }
 };
 
-// 🔒 kiểm tra 2 người có đang chặn nhau không (theo 1 trong 2 chiều)
-const isBlockedBetween = async (userIdA, userIdB) => {
-  const blocked = await Block.exists({
-    $or: [
-      { blocker: userIdA, blocked: userIdB },
-      { blocker: userIdB, blocked: userIdA },
-    ],
-  });
-  return Boolean(blocked);
-};
-
 // gắn thông tin replyTo (đã populate gọn) vào message trả về cho client
 const attachReplyPreview = async (message) => {
   await message.populate({
@@ -115,27 +104,28 @@ export const sendDirectMessage = async (req, res) => {
       }
     }
 
-    // 🔒 Nếu 2 người đang chặn nhau (1 trong 2 chiều): giả vờ gửi thành công
-    // cho người gửi (không lộ việc bị chặn, giống Zalo) nhưng KHÔNG lưu DB,
-    // KHÔNG emit cho người kia -> tin không bao giờ thực sự được gửi đi.
+    // 🔒 Nếu 2 người đang chặn nhau (1 trong 2 chiều): từ chối thẳng, KHÔNG
+    // giả vờ gửi thành công nữa (kiểu Zalo: cả 2 bên đều biết bị chặn).
+    // Trả kèm blockedByMe/blockedMe để frontend hiện đúng banner.
     const otherUserId =
       conversation.participants
         .map((p) => p.userId.toString())
         .find((id) => id !== senderId.toString()) || recipientId;
 
-    if (otherUserId && (await isBlockedBetween(senderId, otherUserId))) {
-      const fakeMessage = {
-        _id: `local-${Date.now()}`,
-        conversationId: conversation._id,
-        senderId,
-        content,
-        imgUrl,
-        replyTo: null,
-        reactions: [],
-        createdAt: new Date().toISOString(),
-        blocked: true,
-      };
-      return res.status(201).json({ message: fakeMessage });
+    if (otherUserId) {
+      const [blockedByMe, blockedMe] = await Promise.all([
+        Block.exists({ blocker: senderId, blocked: otherUserId }),
+        Block.exists({ blocker: otherUserId, blocked: senderId }),
+      ]);
+
+      if (blockedByMe || blockedMe) {
+        return res.status(403).json({
+          message: "Không thể gửi tin nhắn cho người này",
+          blocked: true,
+          blockedByMe: Boolean(blockedByMe),
+          blockedMe: Boolean(blockedMe),
+        });
+      }
     }
 
     // 🔒 Nếu client gửi kèm replyTo, đảm bảo tin nhắn được reply thuộc đúng conversation này
