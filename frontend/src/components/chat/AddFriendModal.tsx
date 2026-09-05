@@ -64,10 +64,13 @@ const AddFriendModal = () => {
     try {
       const message = await addFriend(searchUser._id, data.message.trim());
       toast.success(message);
-
       handleCancel();
-    } catch (error) {
+    } catch (error: any) {
+      // 🔧 FIX: trước đây addFriend không throw khi lỗi, nên luôn rơi vào
+      // nhánh try -> luôn toast.success dù backend trả lỗi (vd "Hai người
+      // đã là bạn bè"). Giờ addFriend throw khi lỗi -> bắt đúng ở đây.
       console.error("Lỗi xảy ra khi gửi request từ form", error);
+      toast.error(error?.message ?? "Lỗi xảy ra khi gửi lời mời kết bạn");
     }
   });
 

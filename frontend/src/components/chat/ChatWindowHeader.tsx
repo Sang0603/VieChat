@@ -21,11 +21,11 @@ const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
   const { user } = useAuthStore();
   const { onlineUsers } = useSocketStore();
   const blockedFriendIds = useFriendStore((s) => s.blockedFriendIds);
-  const friends = useFriendStore((s) => s.friends); // 👇 MỚI THÊM
-  const sentList = useFriendStore((s) => s.sentList); // 👇 MỚI THÊM
-  const addFriend = useFriendStore((s) => s.addFriend); // 👇 MỚI THÊM
+  const friends = useFriendStore((s) => s.friends);
+  const sentList = useFriendStore((s) => s.sentList);
+  const addFriend = useFriendStore((s) => s.addFriend);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [sendingRequest, setSendingRequest] = useState(false); // 👇 MỚI THÊM
+  const [sendingRequest, setSendingRequest] = useState(false);
 
   let otherUser: Conversation["participants"][number] | null | undefined;
 
@@ -49,9 +49,6 @@ const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
   const isBlocked =
     chat.type === "direct" && otherUser ? blockedFriendIds.includes(otherUser._id) : false;
 
-  // 👇 MỚI THÊM: chat direct nhưng 2 người chưa/không còn là bạn bè
-  // (vd: người lạ nhắn tin tới, hoặc vừa unfriend) -> hiện thanh
-  // "Gửi yêu cầu kết bạn", KHÔNG khoá ô nhập tin (khác với trường hợp block)
   const isFriend = Boolean(otherUser) && friends.some((f) => f._id === otherUser!._id);
   const isStranger =
     chat.type === "direct" && Boolean(otherUser) && !isBlocked && !isFriend;
@@ -65,7 +62,11 @@ const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
     setSendingRequest(true);
     try {
       const msg = await addFriend(otherUser._id);
-      if (msg) toast(msg);
+      toast.success(msg);
+    } catch (error: any) {
+      // 🔧 FIX: addFriend giờ throw khi thất bại, cần try/catch ở đây để
+      // báo lỗi đúng thay vì để lỗi rơi mất, không có phản hồi gì cho người dùng
+      toast.error(error?.message ?? "Lỗi xảy ra khi gửi lời mời kết bạn");
     } finally {
       setSendingRequest(false);
     }
@@ -126,7 +127,6 @@ const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
               <h2 className="font-semibold text-foreground truncate">
                 {chat.type === "direct" ? otherUser?.displayName : chat.group?.name}
               </h2>
-              {/* 👇 MỚI THÊM: badge "Người lạ" giống Zalo khi chưa kết bạn */}
               {isStranger && (
                 <p className="text-xs text-muted-foreground truncate">Người lạ</p>
               )}
@@ -171,8 +171,6 @@ const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
         </div>
       )}
 
-      {/* 👇 MỚI THÊM: thanh gửi kết bạn, giống Zalo — không khoá ô nhập tin,
-          chỉ là 1 gợi ý hiện phía trên khung chat */}
       {isStranger && (
         <div className="flex items-center gap-2 px-4 py-2 bg-muted/40 border-t border-border/50 text-sm">
           <UserPlus className="size-4 shrink-0 text-muted-foreground" />

@@ -11,7 +11,7 @@ export const useFriendStore = create<FriendState>((set, _get) => ({
   unreadRequestCount: 0,
   blockedUsers: [],
   blockedFriendIds: [],
-  blockedMeIds: [], // 👇 MỚI THÊM: danh sách người ĐANG chặn mình
+  blockedMeIds: [], // 👇 danh sách người ĐANG chặn mình
   searchByUsername: async (username) => {
     try {
       set({ loading: true });
@@ -33,9 +33,11 @@ export const useFriendStore = create<FriendState>((set, _get) => ({
       return resultMessage;
     } catch (error: any) {
       console.error("Lỗi xảy ra khi addFriend", error);
-      // 👇 MỚI THÊM: ưu tiên lấy message thật từ backend (vd "Đã có lời mời
-      // kết bạn đang chờ") thay vì luôn trả về message chung chung
-      return (
+      // 🔧 FIX: trước đây trả về string lỗi giống hệt string thành công,
+      // khiến nơi gọi (AddFriendModal) không phân biệt được, luôn toast
+      // thành công dù thực ra là lỗi (vd "Hai người đã là bạn bè"). Giờ
+      // ném lỗi ra để nơi gọi bắt bằng try/catch và toast đúng loại.
+      throw new Error(
         error?.response?.data?.message ?? "Lỗi xảy ra khi gửi kết bạn. Hãy thử lại"
       );
     } finally {
@@ -138,10 +140,6 @@ export const useFriendStore = create<FriendState>((set, _get) => ({
     try {
       set({ loading: true });
       await friendService.blockFriend(friendId);
-      // 🔧 FIX: KHÔNG xóa friendId khỏi danh sách "friends" nữa — chặn không
-      // làm mất bạn bè, chỉ khóa nhắn tin/gọi. Trước đây filter friends ra
-      // khiến sau khi chặn, khung chat hiểu nhầm là "người lạ" và hiện
-      // thanh "Gửi kết bạn" dù 2 người vẫn đang là bạn.
       set((state) => ({
         blockedFriendIds: state.blockedFriendIds.includes(friendId)
           ? state.blockedFriendIds
@@ -162,12 +160,10 @@ export const useFriendStore = create<FriendState>((set, _get) => ({
       set((state) => ({
         friends: state.friends.filter((f) => f._id !== friendId),
       }));
-      // 👇 MỚI THÊM: thông báo xóa bạn thành công
       toast.success("Đã xóa bạn thành công");
       return true;
     } catch (error: any) {
       console.error("Lỗi xảy ra khi unfriend", error);
-      // 👇 MỚI THÊM: thông báo lỗi nếu xóa bạn thất bại
       toast.error(
         error?.response?.data?.message ?? "Xóa bạn thất bại, vui lòng thử lại."
       );
@@ -219,7 +215,6 @@ export const useFriendStore = create<FriendState>((set, _get) => ({
             ? state.blockedFriendIds
             : [...state.blockedFriendIds, friendId]
           : state.blockedFriendIds.filter((id) => id !== friendId),
-        // 👇 MỚI THÊM: đồng bộ luôn chiều "họ chặn mình"
         blockedMeIds: blockedMe
           ? state.blockedMeIds.includes(friendId)
             ? state.blockedMeIds
@@ -232,7 +227,7 @@ export const useFriendStore = create<FriendState>((set, _get) => ({
       return false;
     }
   },
-  // 👇 MỚI THÊM: gọi khi socket báo "user-blocked" / "user-unblocked"
+  // gọi khi socket báo "user-blocked" / "user-unblocked"
   setBlockedByOther: (userId, blocked) => {
     set((state) => ({
       blockedMeIds: blocked
