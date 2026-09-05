@@ -1,5 +1,6 @@
 import Conversation from "../models/Conversation.js";
 import Friend from "../models/Friend.js";
+import User from "../models/User.js"; // 👈 MỚI THÊM
 
 const pair = (a, b) => (a < b ? [a, b] : [b, a]);
 
@@ -20,13 +21,32 @@ export const checkFriendship = async (req, res, next) => {
 
       const isFriend = await Friend.findOne({ userA, userB });
 
+      // 🔧 FIX: chưa kết bạn vẫn được nhắn tin bình thường (giống Zalo).
+      // CHỈ từ chối khi người nhận CHỦ ĐỘNG bật "Chặn tin nhắn từ người lạ"
+      // trong Cài đặt riêng tư của họ. Trước đây luôn từ chối thẳng nếu
+      // chưa là bạn -> sai với yêu cầu mới, không cho ai nhắn tin trước khi
+      // kết bạn.
       if (!isFriend) {
-        return res.status(403).json({ message: "Bạn chưa kết bạn với người này" });
+        const recipient = await User.findById(recipientId).select(
+          "privacy.blockStrangerMessages"
+        );
+
+        if (!recipient) {
+          return res.status(404).json({ message: "Người dùng không tồn tại" });
+        }
+
+        if (recipient.privacy?.blockStrangerMessages) {
+          return res.status(403).json({
+            message: "Người này đã tắt nhận tin nhắn từ người lạ",
+            strangerBlocked: true,
+          });
+        }
       }
 
       return next();
     }
 
+    // 👇 giữ nguyên: thêm thành viên vào nhóm vẫn bắt buộc phải là bạn bè
     const friendChecks = memberIds.map(async (memberId) => {
       const [userA, userB] = pair(me, memberId);
       const friend = await Friend.findOne({ userA, userB });

@@ -143,12 +143,15 @@ export const updateProfile = async (req, res) => {
 export const updatePrivacy = async (req, res) => {
   try {
     const userId = req.user._id;
-    const { showPhone, showDateOfBirth } = req.body;
+    // 👇 MỚI THÊM: blockStrangerMessages
+    const { showPhone, showDateOfBirth, blockStrangerMessages } = req.body;
 
     const updateData = {};
     if (showPhone !== undefined) updateData["privacy.showPhone"] = showPhone;
     if (showDateOfBirth !== undefined)
       updateData["privacy.showDateOfBirth"] = showDateOfBirth;
+    if (blockStrangerMessages !== undefined)
+      updateData["privacy.blockStrangerMessages"] = blockStrangerMessages;
 
     if (Object.keys(updateData).length === 0) {
       return res.status(400).json({ message: "Không có dữ liệu để cập nhật" });

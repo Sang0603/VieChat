@@ -362,23 +362,17 @@ export const blockFriend = async (req, res) => {
       return res.status(400).json({ message: "Không thể tự chặn chính mình" });
     }
 
-    let userA = userId.toString();
-    let userB = friendId.toString();
-    if (userA > userB) [userA, userB] = [userB, userA];
+    // 🔧 FIX: chặn KHÔNG được xóa quan hệ bạn bè (Friend). Trước đây có
+    // Friend.deleteOne khiến chặn xong tự động thành "chưa kết bạn", bỏ
+    // chặn thì mất luôn bạn bè -> sai. Giờ chặn chỉ tạo record Block,
+    // quan hệ bạn bè vẫn giữ nguyên, chỉ bị khóa nhắn tin/gọi trong lúc chặn.
+    await Block.updateOne(
+      { blocker: userId, blocked: friendId },
+      { $setOnInsert: { blocker: userId, blocked: friendId } },
+      { upsert: true }
+    );
 
-    await Promise.all([
-      Block.updateOne(
-        { blocker: userId, blocked: friendId },
-        { $setOnInsert: { blocker: userId, blocked: friendId } },
-        { upsert: true }
-      ),
-      Friend.deleteOne({ userA, userB }),
-    ]);
-
-    io.to(friendId.toString()).emit("friend-removed", { friendId: userId });
-    io.to(userId.toString()).emit("friend-removed", { friendId });
-
-    // 👇 MỚI THÊM: báo real-time cho người BỊ chặn biết ngay, không cần load lại trang
+    // 👇 báo real-time cho người BỊ chặn biết ngay, không cần load lại trang
     io.to(friendId.toString()).emit("user-blocked", { by: userId });
 
     return res.status(200).json({ message: "Đã chặn người dùng" });
@@ -450,7 +444,7 @@ export const unblockUser = async (req, res) => {
       return res.status(404).json({ message: "Người dùng này chưa bị chặn" });
     }
 
-    // 👇 MỚI THÊM: báo real-time cho người vừa được bỏ chặn
+    // 👇 báo real-time cho người vừa được bỏ chặn
     io.to(targetUserId.toString()).emit("user-unblocked", { by: userId });
 
     return res.status(200).json({ message: "Đã bỏ chặn người dùng" });

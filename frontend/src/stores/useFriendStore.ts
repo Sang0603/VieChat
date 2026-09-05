@@ -1,6 +1,7 @@
 import { friendService } from "@/services/friendService";
 import type { FriendState } from "@/types/store";
 import { create } from "zustand";
+import { toast } from "sonner";
 
 export const useFriendStore = create<FriendState>((set, _get) => ({
   friends: [],
@@ -30,9 +31,13 @@ export const useFriendStore = create<FriendState>((set, _get) => ({
       set({ loading: true });
       const resultMessage = await friendService.sendFriendRequest(to, message);
       return resultMessage;
-    } catch (error) {
+    } catch (error: any) {
       console.error("Lỗi xảy ra khi addFriend", error);
-      return "Lỗi xảy ra khi gửi kết bạn. Hãy thử lại";
+      // 👇 MỚI THÊM: ưu tiên lấy message thật từ backend (vd "Đã có lời mời
+      // kết bạn đang chờ") thay vì luôn trả về message chung chung
+      return (
+        error?.response?.data?.message ?? "Lỗi xảy ra khi gửi kết bạn. Hãy thử lại"
+      );
     } finally {
       set({ loading: false });
     }
@@ -133,8 +138,11 @@ export const useFriendStore = create<FriendState>((set, _get) => ({
     try {
       set({ loading: true });
       await friendService.blockFriend(friendId);
+      // 🔧 FIX: KHÔNG xóa friendId khỏi danh sách "friends" nữa — chặn không
+      // làm mất bạn bè, chỉ khóa nhắn tin/gọi. Trước đây filter friends ra
+      // khiến sau khi chặn, khung chat hiểu nhầm là "người lạ" và hiện
+      // thanh "Gửi kết bạn" dù 2 người vẫn đang là bạn.
       set((state) => ({
-        friends: state.friends.filter((f) => f._id !== friendId),
         blockedFriendIds: state.blockedFriendIds.includes(friendId)
           ? state.blockedFriendIds
           : [...state.blockedFriendIds, friendId],
@@ -154,9 +162,15 @@ export const useFriendStore = create<FriendState>((set, _get) => ({
       set((state) => ({
         friends: state.friends.filter((f) => f._id !== friendId),
       }));
+      // 👇 MỚI THÊM: thông báo xóa bạn thành công
+      toast.success("Đã xóa bạn thành công");
       return true;
-    } catch (error) {
+    } catch (error: any) {
       console.error("Lỗi xảy ra khi unfriend", error);
+      // 👇 MỚI THÊM: thông báo lỗi nếu xóa bạn thất bại
+      toast.error(
+        error?.response?.data?.message ?? "Xóa bạn thất bại, vui lòng thử lại."
+      );
       return false;
     } finally {
       set({ loading: false });

@@ -164,13 +164,23 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
     } catch (error: any) {
       console.error(error);
 
-      // 👇 MỚI THÊM: backend từ chối vì đang bị chặn (race condition, ví dụ
+      // 👇 backend từ chối vì đang bị chặn (race condition, ví dụ
       // họ vừa chặn mình ngay lúc mình đang gõ, socket event chưa kịp tới)
       // -> đồng bộ lại state ngay, banner sẽ tự hiện, không khôi phục nội dung
       if (error?.response?.status === 403 && error?.response?.data?.blocked) {
         if (otherUser) checkBlockStatus(otherUser._id);
         toast.error(
           error.response.data.message ?? "Không thể gửi tin nhắn cho người này"
+        );
+        return;
+      }
+
+      // 👇 MỚI THÊM: chưa kết bạn và người nhận đã bật "Chặn tin nhắn từ
+      // người lạ" trong Cài đặt -> báo rõ lý do, không khôi phục nội dung
+      // vì gửi lại cũng sẽ thất bại tương tự
+      if (error?.response?.status === 403 && error?.response?.data?.strangerBlocked) {
+        toast.error(
+          error.response.data.message ?? "Người này không nhận tin nhắn từ người lạ"
         );
         return;
       }
@@ -203,7 +213,10 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
     handleTypingSignal();
   };
 
-  // 👇 MỚI THÊM: 2 banner khác nhau tuỳ hướng chặn, giống Zalo
+  // 👇 2 banner khác nhau tuỳ hướng chặn, giống Zalo. Trường hợp "chưa kết
+  // bạn" KHÔNG khoá ô nhập — vẫn nhắn được bình thường, trừ khi bị chặn hẳn
+  // ở trên, hoặc gửi thất bại vì người nhận bật chặn người lạ (báo lỗi khi
+  // gửi, xử lý trong catch ở trên).
   if (isBlockedByMe) {
     return (
       <div className="flex items-center justify-center gap-2 p-3 min-h-[56px] bg-muted/40 border-t border-border/50 text-sm text-muted-foreground">

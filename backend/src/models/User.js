@@ -49,6 +49,10 @@ const userSchema = new mongoose.Schema(
     privacy: {
       showPhone: { type: Boolean, default: true },
       showDateOfBirth: { type: Boolean, default: true },
+      // 👇 MỚI THÊM: nếu bật, người CHƯA kết bạn sẽ không thể nhắn tin cho
+      // mình. Mặc định false -> giống Zalo, người lạ vẫn nhắn được trừ khi
+      // mình chủ động chặn.
+      blockStrangerMessages: { type: Boolean, default: false },
     },
     // 👇 MỚI THÊM: phân quyền
     role: {

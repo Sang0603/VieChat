@@ -12,14 +12,20 @@ import { useFriendStore } from "@/stores/useFriendStore";
 import CallButton from "../call/CallButton";
 import VideoCallButton from "../call/VideoCallButton";
 import FriendProfileDialog from "./FriendProfileDialog";
-import { ShieldBan } from "lucide-react";
+import { ShieldBan, UserPlus, Loader2 } from "lucide-react";
+import { Button } from "../ui/button";
+import { toast } from "sonner";
 
 const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
   const { conversations, activeConversationId, typingUsers } = useChatStore();
   const { user } = useAuthStore();
   const { onlineUsers } = useSocketStore();
   const blockedFriendIds = useFriendStore((s) => s.blockedFriendIds);
+  const friends = useFriendStore((s) => s.friends); // 👇 MỚI THÊM
+  const sentList = useFriendStore((s) => s.sentList); // 👇 MỚI THÊM
+  const addFriend = useFriendStore((s) => s.addFriend); // 👇 MỚI THÊM
   const [profileOpen, setProfileOpen] = useState(false);
+  const [sendingRequest, setSendingRequest] = useState(false); // 👇 MỚI THÊM
 
   let otherUser: Conversation["participants"][number] | null | undefined;
 
@@ -42,6 +48,28 @@ const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
 
   const isBlocked =
     chat.type === "direct" && otherUser ? blockedFriendIds.includes(otherUser._id) : false;
+
+  // 👇 MỚI THÊM: chat direct nhưng 2 người chưa/không còn là bạn bè
+  // (vd: người lạ nhắn tin tới, hoặc vừa unfriend) -> hiện thanh
+  // "Gửi yêu cầu kết bạn", KHÔNG khoá ô nhập tin (khác với trường hợp block)
+  const isFriend = Boolean(otherUser) && friends.some((f) => f._id === otherUser!._id);
+  const isStranger =
+    chat.type === "direct" && Boolean(otherUser) && !isBlocked && !isFriend;
+  const isRequestSent = Boolean(
+    otherUser && sentList.some((r: any) => (r.to?._id ?? r.to) === otherUser!._id)
+  );
+
+  const handleSendFriendRequest = async () => {
+    if (!otherUser || sendingRequest) return;
+
+    setSendingRequest(true);
+    try {
+      const msg = await addFriend(otherUser._id);
+      if (msg) toast(msg);
+    } finally {
+      setSendingRequest(false);
+    }
+  };
 
   const currentTypers = (typingUsers[chat._id] ?? []).filter(
     (t) => t.userId !== user?._id
@@ -98,7 +126,11 @@ const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
               <h2 className="font-semibold text-foreground truncate">
                 {chat.type === "direct" ? otherUser?.displayName : chat.group?.name}
               </h2>
-              {isTyping && !isBlocked && (
+              {/* 👇 MỚI THÊM: badge "Người lạ" giống Zalo khi chưa kết bạn */}
+              {isStranger && (
+                <p className="text-xs text-muted-foreground truncate">Người lạ</p>
+              )}
+              {isTyping && !isBlocked && !isStranger && (
                 <p className="text-xs text-primary truncate animate-pulse">
                   {getTypingText()}
                 </p>
@@ -136,6 +168,32 @@ const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
         <div className="flex items-center gap-2 px-4 py-2 bg-destructive/10 text-destructive text-xs border-t border-destructive/20">
           <ShieldBan className="size-3.5 shrink-0" />
           Bạn đã chặn người này. Gọi điện và nhắn tin sẽ không hoạt động.
+        </div>
+      )}
+
+      {/* 👇 MỚI THÊM: thanh gửi kết bạn, giống Zalo — không khoá ô nhập tin,
+          chỉ là 1 gợi ý hiện phía trên khung chat */}
+      {isStranger && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-muted/40 border-t border-border/50 text-sm">
+          <UserPlus className="size-4 shrink-0 text-muted-foreground" />
+          <span className="flex-1 text-muted-foreground truncate">
+            {isRequestSent
+              ? "Đã gửi lời mời kết bạn tới người này"
+              : "Gửi yêu cầu kết bạn tới người này"}
+          </span>
+          {!isRequestSent && (
+            <Button
+              size="sm"
+              onClick={handleSendFriendRequest}
+              disabled={sendingRequest}
+            >
+              {sendingRequest ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                "Gửi kết bạn"
+              )}
+            </Button>
+          )}
         </div>
       )}
 

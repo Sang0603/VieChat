@@ -1,6 +1,7 @@
 export interface UserPrivacy {
   showPhone: boolean;
   showDateOfBirth: boolean;
+  blockStrangerMessages: boolean; // 👈 MỚI THÊM: chặn tin nhắn từ người chưa kết bạn
 }
 
 export interface User {

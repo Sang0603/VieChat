@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Shield, Bell, ShieldBan, Phone, Cake } from "lucide-react";
+import { Shield, Bell, ShieldBan, Phone, Cake, UserX } from "lucide-react";
 import {
   Card,
   CardHeader,
@@ -23,6 +23,10 @@ const PrivacySettings = () => {
   const [showDateOfBirth, setShowDateOfBirth] = useState(
     user?.privacy?.showDateOfBirth ?? true
   );
+  // 👇 chặn tin nhắn từ người chưa kết bạn, mặc định tắt
+  const [blockStrangerMessages, setBlockStrangerMessages] = useState(
+    user?.privacy?.blockStrangerMessages ?? false
+  );
   const [blockedDialogOpen, setBlockedDialogOpen] = useState(false);
 
   const handleTogglePhone = async (checked: boolean) => {
@@ -35,6 +39,12 @@ const PrivacySettings = () => {
     setShowDateOfBirth(checked);
     const ok = await updatePrivacy({ showDateOfBirth: checked });
     if (!ok) setShowDateOfBirth(!checked);
+  };
+
+  const handleToggleBlockStranger = async (checked: boolean) => {
+    setBlockStrangerMessages(checked);
+    const ok = await updatePrivacy({ blockStrangerMessages: checked });
+    if (!ok) setBlockStrangerMessages(!checked);
   };
 
   return (
@@ -69,6 +79,21 @@ const PrivacySettings = () => {
               Ngày sinh
             </Label>
             <Switch id="showDob" checked={showDateOfBirth} onCheckedChange={handleToggleDob} />
+          </div>
+
+          <div className="flex items-center justify-between rounded-md glass-light border border-border/30 px-3 py-2.5">
+            <Label
+              htmlFor="blockStranger"
+              className="flex items-center gap-2 cursor-pointer"
+            >
+              <UserX className="h-4 w-4" />
+              Chặn tin nhắn từ người lạ
+            </Label>
+            <Switch
+              id="blockStranger"
+              checked={blockStrangerMessages}
+              onCheckedChange={handleToggleBlockStranger}
+            />
           </div>
         </div>
 
