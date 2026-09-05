@@ -2,6 +2,7 @@ import Friend from "../models/Friend.js";
 import User from "../models/User.js";
 import FriendRequest from "../models/FriendRequest.js";
 import Conversation from "../models/Conversation.js";
+import Block from "../models/Block.js";
 import { io } from "../socket/index.js";
 
 // Helper: format Date -> "dd/mm/yyyy"
@@ -32,6 +33,17 @@ const toFriendProfile = (user) => {
   };
 };
 
+// 🔒 kiểm tra 2 người có đang chặn nhau không (theo 1 trong 2 chiều)
+const isBlockedBetween = async (userIdA, userIdB) => {
+  const blocked = await Block.exists({
+    $or: [
+      { blocker: userIdA, blocked: userIdB },
+      { blocker: userIdB, blocked: userIdA },
+    ],
+  });
+  return Boolean(blocked);
+};
+
 export const sendFriendRequest = async (req, res) => {
   try {
     const { to, message } = req.body;
@@ -47,6 +59,12 @@ export const sendFriendRequest = async (req, res) => {
     const userExists = await User.exists({ _id: to });
 
     if (!userExists) {
+      return res.status(404).json({ message: "Người dùng không tồn tại" });
+    }
+
+    // 🔒 Nếu 2 người đang chặn nhau: báo lỗi giống "không tìm thấy" để
+    // không lộ việc bị chặn (giống Zalo, không tiết lộ trạng thái block)
+    if (await isBlockedBetween(from, to)) {
       return res.status(404).json({ message: "Người dùng không tồn tại" });
     }
 
@@ -290,8 +308,25 @@ export const getFriendProfile = async (req, res) => {
     let userB = friendId.toString();
     if (userA > userB) [userA, userB] = [userB, userA];
 
-    const isFriend = await Friend.exists({ userA, userB });
-    if (!isFriend) {
+    const [isFriend, hasBlockRelation, sharedConversation] = await Promise.all([
+      Friend.exists({ userA, userB }),
+      Block.exists({
+        $or: [
+          { blocker: userId, blocked: friendId },
+          { blocker: friendId, blocked: userId },
+        ],
+      }),
+      Conversation.exists({
+        type: "direct",
+        "participants.userId": { $all: [userId, friendId] },
+      }),
+    ]);
+
+    // 🔒 Cho xem profile nếu: đang là bạn bè, HOẶC đang có quan hệ chặn (để
+    // hiện nút bỏ chặn), HOẶC đã từng có cuộc trò chuyện với nhau (giống
+    // Zalo/Messenger - xem được profile của bất kỳ ai mình từng chat cùng,
+    // không bắt buộc phải đang kết bạn)
+    if (!isFriend && !hasBlockRelation && !sharedConversation) {
       return res.status(403).json({ message: "Hai người chưa là bạn bè" });
     }
 
@@ -306,6 +341,127 @@ export const getFriendProfile = async (req, res) => {
     return res.status(200).json({ friend: toFriendProfile(user) });
   } catch (error) {
     console.error("Lỗi khi lấy hồ sơ bạn bè", error);
+    return res.status(500).json({ message: "Lỗi hệ thống" });
+  }
+};
+
+export const blockFriend = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { friendId } = req.params;
+
+    if (userId.toString() === friendId) {
+      return res.status(400).json({ message: "Không thể tự chặn chính mình" });
+    }
+
+    let userA = userId.toString();
+    let userB = friendId.toString();
+    if (userA > userB) [userA, userB] = [userB, userA];
+
+    await Promise.all([
+      Block.updateOne(
+        { blocker: userId, blocked: friendId },
+        { $setOnInsert: { blocker: userId, blocked: friendId } },
+        { upsert: true }
+      ),
+      Friend.deleteOne({ userA, userB }),
+    ]);
+
+    io.to(friendId.toString()).emit("friend-removed", { friendId: userId });
+    io.to(userId.toString()).emit("friend-removed", { friendId });
+
+    return res.status(200).json({ message: "Đã chặn người dùng" });
+  } catch (error) {
+    console.error("Lỗi khi chặn bạn bè", error);
+    return res.status(500).json({ message: "Lỗi hệ thống" });
+  }
+};
+
+export const unfriendUser = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { friendId } = req.params;
+
+    let userA = userId.toString();
+    let userB = friendId.toString();
+    if (userA > userB) [userA, userB] = [userB, userA];
+
+    const result = await Friend.deleteOne({ userA, userB });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ message: "Hai người chưa là bạn bè" });
+    }
+
+    io.to(friendId.toString()).emit("friend-removed", { friendId: userId });
+    io.to(userId.toString()).emit("friend-removed", { friendId });
+
+    return res.status(200).json({ message: "Đã xóa khỏi danh sách bạn bè" });
+  } catch (error) {
+    console.error("Lỗi khi xóa bạn bè", error);
+    return res.status(500).json({ message: "Lỗi hệ thống" });
+  }
+};
+
+export const getBlockedUsers = async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    const blocks = await Block.find({ blocker: userId })
+      .populate("blocked", "_id displayName username avatarUrl")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const blockedUsers = blocks
+      .filter((b) => b.blocked)
+      .map((b) => ({
+        _id: b.blocked._id,
+        displayName: b.blocked.displayName,
+        username: b.blocked.username,
+        avatarUrl: b.blocked.avatarUrl,
+        blockedAt: b.createdAt,
+      }));
+
+    return res.status(200).json({ blockedUsers });
+  } catch (error) {
+    console.error("Lỗi khi lấy danh sách người bị chặn", error);
+    return res.status(500).json({ message: "Lỗi hệ thống" });
+  }
+};
+
+export const unblockUser = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { userId: targetUserId } = req.params;
+
+    const result = await Block.deleteOne({ blocker: userId, blocked: targetUserId });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ message: "Người dùng này chưa bị chặn" });
+    }
+
+    return res.status(200).json({ message: "Đã bỏ chặn người dùng" });
+  } catch (error) {
+    console.error("Lỗi khi bỏ chặn người dùng", error);
+    return res.status(500).json({ message: "Lỗi hệ thống" });
+  }
+};
+
+export const getBlockStatus = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { friendId } = req.params;
+
+    const [blockedByMe, blockedMe] = await Promise.all([
+      Block.exists({ blocker: userId, blocked: friendId }),
+      Block.exists({ blocker: friendId, blocked: userId }),
+    ]);
+
+    return res.status(200).json({
+      blockedByMe: Boolean(blockedByMe),
+      blockedMe: Boolean(blockedMe),
+    });
+  } catch (error) {
+    console.error("Lỗi khi kiểm tra trạng thái chặn", error);
     return res.status(500).json({ message: "Lỗi hệ thống" });
   }
 };

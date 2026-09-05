@@ -6,6 +6,8 @@ import ChatWindowBody from "./ChatWindowBody";
 import MessageInput from "./MessageInput";
 import { useEffect } from "react";
 import ChatWindowSkeleton from "../skeleton/ChatWindowSkeleton";
+import { useAuthStore } from "@/stores/useAuthStore";
+import { useFriendStore } from "@/stores/useFriendStore";
 
 const ChatWindowLayout = () => {
   const {
@@ -14,6 +16,8 @@ const ChatWindowLayout = () => {
     messageLoading: loading,
     markAsSeen,
   } = useChatStore();
+  const { user } = useAuthStore();
+  const checkBlockStatus = useFriendStore((s) => s.checkBlockStatus);
 
   const selectedConvo =
     conversations.find((c) => c._id === activeConversationId) ?? null;
@@ -33,6 +37,17 @@ const ChatWindowLayout = () => {
 
     markSeen();
   }, [markAsSeen, selectedConvo]);
+
+  // 👇 MỚI THÊM: mỗi lần đổi cuộc trò chuyện (direct), đồng bộ lại trạng thái
+  // "mình đã chặn người này chưa" để cửa sổ chat disable input đúng thực tế
+  useEffect(() => {
+    if (!selectedConvo || selectedConvo.type !== "direct" || !user) return;
+
+    const otherUser = selectedConvo.participants.find((p) => p._id !== user._id);
+    if (!otherUser) return;
+
+    checkBlockStatus(otherUser._id);
+  }, [selectedConvo, user, checkBlockStatus]);
 
   if (!selectedConvo) {
     return <ChatWelcomeScreen />;

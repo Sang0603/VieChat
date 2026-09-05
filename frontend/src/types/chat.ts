@@ -84,4 +84,7 @@ export interface Message {
   replyTo?: ReplyPreview | null;
   // 👇 MỚI THÊM: danh sách reaction hiện có trên tin nhắn
   reactions?: MessageReaction[];
+  // 👇 MỚI THÊM: true khi tin này thực ra KHÔNG được gửi đi (do người nhận đã
+  // chặn mình) - backend trả về bản giả chỉ để hiện phía người gửi, không lưu DB
+  blocked?: boolean;
 }

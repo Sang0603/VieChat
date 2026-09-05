@@ -110,6 +110,12 @@ export const useSocketStore = create<SocketState>((set, get) => ({
       useChatStore.getState().updateMessageReaction(conversationId, messageId, reactions);
     });
 
+    // ==================== FRIEND REMOVED (block / unfriend) ====================
+    socket.on("friend-removed", ({ friendId }) => {
+      useFriendStore.getState().friendRemoved(friendId);
+    });
+    // ==================== HẾT PHẦN FRIEND REMOVED ====================
+
     // ==================== TYPING INDICATOR ====================
     socket.on("typing:start", ({ conversationId, userId, displayName }) => {
       useChatStore.getState().setUserTyping(conversationId, { userId, displayName }, true);

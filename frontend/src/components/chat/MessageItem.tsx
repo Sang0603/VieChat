@@ -402,6 +402,12 @@ const MessageItem = ({
             </Card>
           )}
 
+          {message.blocked && message.isOwn && (
+            <p className="text-xs text-muted-foreground italic self-end mr-1">
+              {otherParticipant?.displayName ?? "Người này"} đã chặn tin nhắn.
+            </p>
+          )}
+
           {totalReactions > 0 && (
             <div
               className={cn(

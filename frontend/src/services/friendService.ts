@@ -48,4 +48,29 @@ export const friendService = {
     const res = await api.get(`/friends/${friendId}/profile`);
     return res.data.friend;
   },
+
+  async blockFriend(friendId: string) {
+    const res = await api.post(`/friends/${friendId}/block`);
+    return res.data.message;
+  },
+
+  async unfriend(friendId: string) {
+    const res = await api.delete(`/friends/${friendId}`);
+    return res.data.message;
+  },
+
+  async getBlockedUsers() {
+    const res = await api.get("/friends/blocked");
+    return res.data.blockedUsers;
+  },
+
+  async unblockUser(userId: string) {
+    const res = await api.delete(`/friends/blocked/${userId}`);
+    return res.data.message;
+  },
+
+  async getBlockStatus(friendId: string): Promise<{ blockedByMe: boolean; blockedMe: boolean }> {
+    const res = await api.get(`/friends/${friendId}/block-status`);
+    return res.data;
+  },
 };

@@ -94,13 +94,21 @@ export const useChatStore = create<ChatState>()(
       sendDirectMessage: async (recipientId, content, imgUrl, replyTo) => {
         try {
           const { activeConversationId } = get();
-          await chatService.sendDirectMessage(
+          const message = await chatService.sendDirectMessage(
             recipientId,
             content,
             imgUrl,
             activeConversationId || undefined,
             replyTo
           );
+
+          // 👇 MỚI THÊM: nếu bị chặn, backend trả về tin giả (không lưu DB,
+          // không emit socket) -> tự thêm vào state ở đây để CHÍNH người gửi
+          // thấy tin mình vừa gõ + dòng cảnh báo, người kia không nhận được gì.
+          if (message?.blocked) {
+            await get().addMessage(message);
+          }
+
           set((state) => ({
             conversations: state.conversations.map((c) =>
               c._id === activeConversationId ? { ...c, seenBy: [] } : c

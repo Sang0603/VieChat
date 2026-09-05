@@ -21,6 +21,7 @@
 import CallLog from "../models/CallLog.js";
 import Message from "../models/Message.js";
 import Conversation from "../models/Conversation.js";
+import Block from "../models/Block.js";
 import {
   emitNewMessage,
   updateConversationAfterCreateMessage,
@@ -49,6 +50,17 @@ function buildCallPreviewText(callType, status, durationInSeconds) {
   if (status === "missed") return `${label} nhỡ`;
   if (status === "cancelled") return `${label} nhỡ`;
   return `${label} bị từ chối`;
+}
+
+// 🔒 kiểm tra 2 người có đang chặn nhau không (theo 1 trong 2 chiều)
+async function isBlockedBetween(userIdA, userIdB) {
+  const blocked = await Block.exists({
+    $or: [
+      { blocker: userIdA, blocked: userIdB },
+      { blocker: userIdB, blocked: userIdA },
+    ],
+  });
+  return Boolean(blocked);
 }
 
 /**
@@ -107,7 +119,14 @@ export function registerCallHandlers(io, socket, userSocketMap) {
   }
 
   // ---- 1. NGƯỜI GỌI mời cuộc gọi ----
-  socket.on("call:invite", ({ toUserId, conversationId, callType = "audio", fromUser }) => {
+  socket.on("call:invite", async ({ toUserId, conversationId, callType = "audio", fromUser }) => {
+    // 🔒 Nếu 2 người đang chặn nhau: báo y hệt trường hợp "người nhận
+    // không online" -> người gọi không biết mình đang bị chặn.
+    if (await isBlockedBetween(currentUserId, toUserId)) {
+      socket.emit("call:unavailable", { toUserId });
+      return;
+    }
+
     const targetSocketId = userSocketMap.get(toUserId);
 
     if (!targetSocketId) {

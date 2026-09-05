@@ -5,7 +5,11 @@ import {
   signOut,
   signUp,
 } from "../controllers/authController.js";
-import { authLimiter, signInLimiter } from "../middlewares/rateLimitMiddleware.js";
+import {
+  authLimiter,
+  signInLimiter,
+  refreshLimiter,
+} from "../middlewares/rateLimitMiddleware.js";
 
 const router = express.Router();
 
@@ -15,6 +19,6 @@ router.post("/signin", signInLimiter, signIn);
 
 router.post("/signout", signOut);
 
-router.post("/refresh", authLimiter, refreshToken);
+router.post("/refresh", refreshLimiter, refreshToken);
 
 export default router;

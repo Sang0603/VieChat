@@ -17,6 +17,23 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// 👇 MỚI THÊM: khi nhiều request cùng 403 một lúc (token vừa hết hạn giữa lúc
+// trang đang bắn nhiều API), chỉ gọi /auth/refresh MỘT LẦN DUY NHẤT, các
+// request còn lại xếp hàng đợi kết quả của lần refresh đó rồi retry lại -
+// tránh gọi refresh dồn dập (dính rate limit 429) hoặc đua nhau dùng refresh
+// token đã bị xoay vòng (rotate) làm token cũ vô hiệu -> tự logout oan.
+let isRefreshing = false;
+let refreshSubscribers: Array<(token: string | null) => void> = [];
+
+function subscribeTokenRefresh(callback: (token: string | null) => void) {
+  refreshSubscribers.push(callback);
+}
+
+function onRefreshed(token: string | null) {
+  refreshSubscribers.forEach((cb) => cb(token));
+  refreshSubscribers = [];
+}
+
 // tự động gọi refresh api khi access token hết hạn
 api.interceptors.response.use(
   (res) => res,
@@ -32,20 +49,39 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    originalRequest._retryCount = originalRequest._retryCount || 0;
+    if (error.response?.status === 403 && !originalRequest._retry) {
+      originalRequest._retry = true;
 
-    if (error.response?.status === 403 && originalRequest._retryCount < 4) {
-      originalRequest._retryCount += 1;
+      // 👇 MỚI THÊM: nếu đã có 1 request khác đang refresh rồi, không gọi
+      // thêm nữa - đứng vào hàng đợi, khi nào refresh xong thì retry
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          subscribeTokenRefresh((token) => {
+            if (!token) {
+              reject(error);
+              return;
+            }
+            originalRequest.headers.Authorization = `Bearer ${token}`;
+            resolve(api(originalRequest));
+          });
+        });
+      }
+
+      isRefreshing = true;
 
       try {
         const res = await api.post("/auth/refresh", { withCredentials: true });
         const newAccessToken = res.data.accessToken;
 
         useAuthStore.getState().setAccessToken(newAccessToken);
+        isRefreshing = false;
+        onRefreshed(newAccessToken); // 👈 báo cho các request đang đợi
 
         originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
         return api(originalRequest);
       } catch (refreshError) {
+        isRefreshing = false;
+        onRefreshed(null); // 👈 báo thất bại cho các request đang đợi
         useAuthStore.getState().clearState();
         return Promise.reject(refreshError);
       }

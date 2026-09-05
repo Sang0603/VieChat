@@ -2,11 +2,12 @@ import { useAuthStore } from "@/stores/useAuthStore";
 import type { Conversation } from "@/types/chat";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../ui/button";
-import { ImagePlus, Send, X, Loader2, Reply } from "lucide-react";
+import { ImagePlus, Send, X, Loader2, Reply, ShieldBan } from "lucide-react";
 import { Input } from "../ui/input";
 import EmojiPicker from "./EmojiPicker";
 import { useChatStore } from "@/stores/useChatStore";
 import { useSocketStore } from "@/stores/useSocketStore";
+import { useFriendStore } from "@/stores/useFriendStore";
 import { chatService } from "@/services/chatService";
 import { toast } from "sonner";
 
@@ -18,6 +19,7 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
   const { sendDirectMessage, sendGroupMessage, replyingTo, clearReplyingTo } =
     useChatStore();
   const { startTyping, stopTyping } = useSocketStore();
+  const blockedFriendIds = useFriendStore((s) => s.blockedFriendIds);
   const [value, setValue] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -45,6 +47,13 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
   }, [selectedConvo._id]);
 
   if (!user) return;
+
+  // 👇 MỚI THÊM: nếu là chat direct với người mình đã chặn -> khoá hẳn ô nhập
+  const otherUser =
+    selectedConvo.type === "direct"
+      ? selectedConvo.participants.find((p) => p._id !== user._id)
+      : undefined;
+  const isBlocked = Boolean(otherUser && blockedFriendIds.includes(otherUser._id));
 
   // 👇 MỚI THÊM: gọi mỗi khi nội dung input thay đổi
   const handleTypingSignal = () => {
@@ -101,6 +110,8 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
   };
 
   const sendMessage = async () => {
+    if (isBlocked) return; // 👈 MỚI THÊM: chặn cứng ở phía client, không gọi API nữa
+
     const trimmed = value.trim();
     if (!trimmed && !imageFile) return;
     if (sending) return;
@@ -169,6 +180,16 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
     setValue(e.target.value);
     handleTypingSignal();
   };
+
+  // 👇 MỚI THÊM: giao diện khoá hẳn khi đã chặn, không cho thao tác gì
+  if (isBlocked) {
+    return (
+      <div className="flex items-center justify-center gap-2 p-3 min-h-[56px] bg-muted/40 border-t border-border/50 text-sm text-muted-foreground">
+        <ShieldBan className="size-4" />
+        Bạn đã chặn người này. Bỏ chặn trong phần Cài đặt để nhắn tin trở lại.
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-2 p-3 min-h-[56px] bg-background">

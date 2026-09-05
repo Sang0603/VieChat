@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import ChangePasswordDialog from "./ChangePasswordDialog";
+import BlockedUsersDialog from "./BlockedUsersDialog";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useUserStore } from "@/stores/useUserStore";
 
@@ -22,6 +23,7 @@ const PrivacySettings = () => {
   const [showDateOfBirth, setShowDateOfBirth] = useState(
     user?.privacy?.showDateOfBirth ?? true
   );
+  const [blockedDialogOpen, setBlockedDialogOpen] = useState(false);
 
   const handleTogglePhone = async (checked: boolean) => {
     setShowPhone(checked);
@@ -84,9 +86,10 @@ const PrivacySettings = () => {
           <Button
             variant="outline"
             className="w-full justify-start glass-light border-border/30 hover:text-destructive"
+            onClick={() => setBlockedDialogOpen(true)}
           >
             <ShieldBan className="size-4 mr-2" />
-            Chặn & Báo cáo
+            Người dùng đã chặn
           </Button>
         </div>
 
@@ -97,6 +100,8 @@ const PrivacySettings = () => {
           </Button>
         </div>
       </CardContent>
+
+      <BlockedUsersDialog open={blockedDialogOpen} onOpenChange={setBlockedDialogOpen} />
     </Card>
   );
 };

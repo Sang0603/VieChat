@@ -1,5 +1,6 @@
 import Conversation from "../models/Conversation.js";
 import Message from "../models/Message.js";
+import Block from "../models/Block.js";
 import {
   emitNewMessage,
   emitReactionUpdate,
@@ -26,6 +27,17 @@ export const uploadChatImage = async (req, res) => {
     console.error("Lỗi xảy ra khi upload ảnh tin nhắn", error);
     return res.status(500).json({ message: "Upload ảnh thất bại" });
   }
+};
+
+// 🔒 kiểm tra 2 người có đang chặn nhau không (theo 1 trong 2 chiều)
+const isBlockedBetween = async (userIdA, userIdB) => {
+  const blocked = await Block.exists({
+    $or: [
+      { blocker: userIdA, blocked: userIdB },
+      { blocker: userIdB, blocked: userIdA },
+    ],
+  });
+  return Boolean(blocked);
 };
 
 // gắn thông tin replyTo (đã populate gọn) vào message trả về cho client
@@ -101,6 +113,29 @@ export const sendDirectMessage = async (req, res) => {
           unreadCounts: new Map(),
         });
       }
+    }
+
+    // 🔒 Nếu 2 người đang chặn nhau (1 trong 2 chiều): giả vờ gửi thành công
+    // cho người gửi (không lộ việc bị chặn, giống Zalo) nhưng KHÔNG lưu DB,
+    // KHÔNG emit cho người kia -> tin không bao giờ thực sự được gửi đi.
+    const otherUserId =
+      conversation.participants
+        .map((p) => p.userId.toString())
+        .find((id) => id !== senderId.toString()) || recipientId;
+
+    if (otherUserId && (await isBlockedBetween(senderId, otherUserId))) {
+      const fakeMessage = {
+        _id: `local-${Date.now()}`,
+        conversationId: conversation._id,
+        senderId,
+        content,
+        imgUrl,
+        replyTo: null,
+        reactions: [],
+        createdAt: new Date().toISOString(),
+        blocked: true,
+      };
+      return res.status(201).json({ message: fakeMessage });
     }
 
     // 🔒 Nếu client gửi kèm replyTo, đảm bảo tin nhắn được reply thuộc đúng conversation này

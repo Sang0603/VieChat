@@ -8,14 +8,17 @@ import UserAvatar from "./UserAvatar";
 import StatusBadge from "./StatusBadge";
 import GroupChatAvatar from "./GroupChatAvatar";
 import { useSocketStore } from "@/stores/useSocketStore";
+import { useFriendStore } from "@/stores/useFriendStore";
 import CallButton from "../call/CallButton";
 import VideoCallButton from "../call/VideoCallButton";
 import FriendProfileDialog from "./FriendProfileDialog";
+import { ShieldBan } from "lucide-react";
 
 const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
   const { conversations, activeConversationId, typingUsers } = useChatStore();
   const { user } = useAuthStore();
   const { onlineUsers } = useSocketStore();
+  const blockedFriendIds = useFriendStore((s) => s.blockedFriendIds);
   const [profileOpen, setProfileOpen] = useState(false);
 
   let otherUser: Conversation["participants"][number] | null | undefined;
@@ -37,6 +40,9 @@ const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
     if (!user || !otherUser) return;
   }
 
+  const isBlocked =
+    chat.type === "direct" && otherUser ? blockedFriendIds.includes(otherUser._id) : false;
+
   const currentTypers = (typingUsers[chat._id] ?? []).filter(
     (t) => t.userId !== user?._id
   );
@@ -53,82 +59,93 @@ const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
   };
 
   return (
-    <header className="sticky top-0 z-10 px-4 py-2 flex items-center bg-background">
-      <div className="flex items-center gap-2 w-full">
-        <button
-          type="button"
-          onClick={() => {
-            if (chat?.type === "direct" && otherUser) setProfileOpen(true);
-          }}
-          disabled={chat.type !== "direct"}
-          className={`flex items-center gap-3 min-w-0 ${
-            chat.type === "direct" ? "cursor-pointer" : "cursor-default"
-          }`}
-        >
-          <div className="relative">
-            {chat.type === "direct" ? (
-              <>
-                <UserAvatar
-                  type={"sidebar"}
-                  name={otherUser?.displayName || "VieChat"}
-                  avatarUrl={otherUser?.avatarUrl || undefined}
+    <header className="sticky top-0 z-10 flex flex-col bg-background">
+      <div className="px-4 py-2 flex items-center">
+        <div className="flex items-center gap-2 w-full">
+          <button
+            type="button"
+            onClick={() => {
+              if (chat?.type === "direct" && otherUser) setProfileOpen(true);
+            }}
+            disabled={chat.type !== "direct"}
+            className={`flex items-center gap-3 min-w-0 ${
+              chat.type === "direct" ? "cursor-pointer" : "cursor-default"
+            }`}
+          >
+            <div className="relative">
+              {chat.type === "direct" ? (
+                <>
+                  <UserAvatar
+                    type={"sidebar"}
+                    name={otherUser?.displayName || "VieChat"}
+                    avatarUrl={otherUser?.avatarUrl || undefined}
+                  />
+                  <StatusBadge
+                    status={
+                      onlineUsers.includes(otherUser?._id ?? "") ? "online" : "offline"
+                    }
+                  />
+                </>
+              ) : (
+                <GroupChatAvatar
+                  participants={chat.participants}
+                  type="sidebar"
                 />
-                <StatusBadge
-                  status={
-                    onlineUsers.includes(otherUser?._id ?? "") ? "online" : "offline"
-                  }
+              )}
+            </div>
+
+            <div className="min-w-0">
+              <h2 className="font-semibold text-foreground truncate">
+                {chat.type === "direct" ? otherUser?.displayName : chat.group?.name}
+              </h2>
+              {isTyping && !isBlocked && (
+                <p className="text-xs text-primary truncate animate-pulse">
+                  {getTypingText()}
+                </p>
+              )}
+            </div>
+          </button>
+
+          <div className="ml-auto flex items-center gap-1">
+            {chat.type === "direct" && otherUser && !isBlocked && (
+              <>
+                <CallButton
+                  targetUserId={otherUser._id}
+                  targetUserName={otherUser.displayName}
+                  targetUserAvatar={otherUser.avatarUrl}
+                  conversationId={chat._id}
+                />
+                <VideoCallButton
+                  targetUserId={otherUser._id}
+                  targetUserName={otherUser.displayName}
+                  targetUserAvatar={otherUser.avatarUrl}
+                  conversationId={chat._id}
                 />
               </>
-            ) : (
-              <GroupChatAvatar
-                participants={chat.participants}
-                type="sidebar"
-              />
             )}
+            <Separator
+              orientation="vertical"
+              className="mx-1 data-[orientation=vertical]:h-4"
+            />
+            <SidebarTrigger className="text-foreground" />
           </div>
-
-          <div className="min-w-0">
-            <h2 className="font-semibold text-foreground truncate">
-              {chat.type === "direct" ? otherUser?.displayName : chat.group?.name}
-            </h2>
-            {isTyping && (
-              <p className="text-xs text-primary truncate animate-pulse">
-                {getTypingText()}
-              </p>
-            )}
-          </div>
-        </button>
-
-        <div className="ml-auto flex items-center gap-1">
-          {chat.type === "direct" && otherUser && (
-            <>
-              <CallButton
-                targetUserId={otherUser._id}
-                targetUserName={otherUser.displayName}
-                targetUserAvatar={otherUser.avatarUrl}
-                conversationId={chat._id}
-              />
-              <VideoCallButton
-                targetUserId={otherUser._id}
-                targetUserName={otherUser.displayName}
-                targetUserAvatar={otherUser.avatarUrl}
-                conversationId={chat._id}
-              />
-            </>
-          )}
-          <Separator
-            orientation="vertical"
-            className="mx-1 data-[orientation=vertical]:h-4"
-          />
-          <SidebarTrigger className="text-foreground" />
         </div>
       </div>
+
+      {isBlocked && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-destructive/10 text-destructive text-xs border-t border-destructive/20">
+          <ShieldBan className="size-3.5 shrink-0" />
+          Bạn đã chặn người này. Gọi điện và nhắn tin sẽ không hoạt động.
+        </div>
+      )}
 
       {chat.type === "direct" && otherUser && (
         <FriendProfileDialog
           open={profileOpen}
           onOpenChange={setProfileOpen}
           friendId={otherUser._id}
+          onBlock={(friendId) => useFriendStore.getState().blockFriend(friendId)}
+          onUnfriend={(friendId) => useFriendStore.getState().unfriend(friendId)}
         />
       )}
     </header>

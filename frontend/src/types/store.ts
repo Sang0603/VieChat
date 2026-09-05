@@ -109,6 +109,15 @@ export interface SocketState {
   stopTyping: (conversationId: string) => void;
 }
 
+// 👇 MỚI THÊM: 1 người đang nằm trong danh sách bị mình chặn
+export interface BlockedUser {
+  _id: string;
+  displayName: string;
+  username: string;
+  avatarUrl?: string | null;
+  blockedAt: string;
+}
+
 export interface FriendState {
   friends: Friend[];
   loading: boolean;
@@ -116,6 +125,10 @@ export interface FriendState {
   sentList: FriendRequest[];
   // số lời mời kết bạn MỚI chưa được xem (dùng để hiện chấm đỏ trên icon chuông)
   unreadRequestCount: number;
+  // 👇 MỚI THÊM: danh sách những người mình đã chặn (cho màn "Người dùng đã chặn")
+  blockedUsers: BlockedUser[];
+  // 👇 MỚI THÊM: danh sách id bạn bè mà MÌNH đã chặn (dùng để disable chat realtime)
+  blockedFriendIds: string[];
   searchByUsername: (username: string) => Promise<User | null>;
   addFriend: (to: string, message?: string) => Promise<string>;
   getAllFriendRequests: () => Promise<void>;
@@ -130,6 +143,18 @@ export interface FriendState {
   friendRequestAcceptedSelf: (requestId: string, friend: Friend) => void;
   // gọi khi user mở dropdown/dialog thông báo -> xoá chấm đỏ
   markRequestsSeen: () => void;
+  // gọi API chặn 1 người bạn (chặn tin nhắn + cuộc gọi, tự động hủy kết bạn)
+  blockFriend: (friendId: string) => Promise<boolean>;
+  // gọi API xóa 1 người khỏi danh sách bạn bè
+  unfriend: (friendId: string) => Promise<boolean>;
+  // gọi khi socket báo bên kia vừa block/unfriend mình -> xóa khỏi danh sách friends
+  friendRemoved: (friendId: string) => void;
+  // 👇 MỚI THÊM: lấy danh sách người mình đã chặn
+  getBlockedUsers: () => Promise<void>;
+  // 👇 MỚI THÊM: bỏ chặn 1 người
+  unblockUser: (userId: string) => Promise<boolean>;
+  // 👇 MỚI THÊM: kiểm tra + đồng bộ trạng thái chặn của 1 friendId vào blockedFriendIds
+  checkBlockStatus: (friendId: string) => Promise<boolean>;
 }
 
 export interface UserState {

@@ -8,6 +8,8 @@ export const useFriendStore = create<FriendState>((set, _get) => ({
   receivedList: [],
   sentList: [],
   unreadRequestCount: 0,
+  blockedUsers: [],
+  blockedFriendIds: [],
   searchByUsername: async (username) => {
     try {
       set({ loading: true });
@@ -125,5 +127,88 @@ export const useFriendStore = create<FriendState>((set, _get) => ({
   // gọi khi user mở dropdown/dialog thông báo -> xoá chấm đỏ
   markRequestsSeen: () => {
     set({ unreadRequestCount: 0 });
+  },
+  blockFriend: async (friendId) => {
+    try {
+      set({ loading: true });
+      await friendService.blockFriend(friendId);
+      set((state) => ({
+        friends: state.friends.filter((f) => f._id !== friendId),
+        blockedFriendIds: state.blockedFriendIds.includes(friendId)
+          ? state.blockedFriendIds
+          : [...state.blockedFriendIds, friendId],
+      }));
+      return true;
+    } catch (error) {
+      console.error("Lỗi xảy ra khi blockFriend", error);
+      return false;
+    } finally {
+      set({ loading: false });
+    }
+  },
+  unfriend: async (friendId) => {
+    try {
+      set({ loading: true });
+      await friendService.unfriend(friendId);
+      set((state) => ({
+        friends: state.friends.filter((f) => f._id !== friendId),
+      }));
+      return true;
+    } catch (error) {
+      console.error("Lỗi xảy ra khi unfriend", error);
+      return false;
+    } finally {
+      set({ loading: false });
+    }
+  },
+  // gọi khi socket báo bên kia block/unfriend mình
+  friendRemoved: (friendId) => {
+    set((state) => ({
+      friends: state.friends.filter((f) => f._id !== friendId),
+    }));
+  },
+  getBlockedUsers: async () => {
+    try {
+      set({ loading: true });
+      const blockedUsers = await friendService.getBlockedUsers();
+      set({ blockedUsers });
+    } catch (error) {
+      console.error("Lỗi xảy ra khi load blockedUsers", error);
+      set({ blockedUsers: [] });
+    } finally {
+      set({ loading: false });
+    }
+  },
+  unblockUser: async (userId) => {
+    try {
+      set({ loading: true });
+      await friendService.unblockUser(userId);
+      set((state) => ({
+        blockedUsers: state.blockedUsers.filter((u) => u._id !== userId),
+        blockedFriendIds: state.blockedFriendIds.filter((id) => id !== userId),
+      }));
+      return true;
+    } catch (error) {
+      console.error("Lỗi xảy ra khi unblockUser", error);
+      return false;
+    } finally {
+      set({ loading: false });
+    }
+  },
+  checkBlockStatus: async (friendId) => {
+    try {
+      const { blockedByMe } = await friendService.getBlockStatus(friendId);
+      set((state) => ({
+        blockedFriendIds: blockedByMe
+          ? state.blockedFriendIds.includes(friendId)
+            ? state.blockedFriendIds
+            : [...state.blockedFriendIds, friendId]
+          : state.blockedFriendIds.filter((id) => id !== friendId),
+      }));
+      return blockedByMe;
+    } catch (error) {
+      console.error("Lỗi xảy ra khi checkBlockStatus", error);
+      return false;
+    }
   },
 }));
