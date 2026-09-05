@@ -166,14 +166,17 @@ const MessageItem = ({
 
   const isGroupBreak = isShowTime || message.senderId !== prev?.senderId;
 
+  // 🔧 FIX: optional chaining trên p._id và message.senderId — nếu user tương ứng
+  // đã bị xóa khỏi DB, backend có thể trả participant thiếu _id; trước đây gọi
+  // .toString() trực tiếp gây "Cannot read properties of undefined (reading 'toString')"
   const participant = selectedConvo.participants.find(
-    (p: Participant) => p._id.toString() === message.senderId.toString()
+    (p: Participant) => p._id?.toString() === message.senderId?.toString()
   );
 
   const isCallMessage = message.type === "call" && !!message.callInfo;
 
   const otherParticipant = selectedConvo.participants.find(
-    (p: Participant) => p._id.toString() !== message.senderId.toString()
+    (p: Participant) => p._id?.toString() !== message.senderId?.toString()
   );
 
   const { startCall, canCall } = useStartCall(selectedConvo._id);

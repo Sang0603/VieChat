@@ -85,4 +85,10 @@ export const chatService = {
     const res = await api.patch(`/messages/${messageId}/reaction`, { emoji });
     return res.data.reactions;
   },
+
+  // 🆕 MỚI THÊM: xóa (ẩn) đoạn chat phía mình — không xóa dữ liệu thật
+  async hideConversation(conversationId: string) {
+    const res = await api.delete(`/conversations/${conversationId}`);
+    return res.data;
+  },
 };

@@ -1,6 +1,12 @@
 import { Card } from "@/components/ui/card";
 import { formatOnlineTime, cn } from "@/lib/utils";
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, Trash2 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface ChatCardProps {
   convoId: string;
@@ -11,6 +17,10 @@ interface ChatCardProps {
   unreadCount?: number;
   leftSection: React.ReactNode;
   subtitle: React.ReactNode;
+  // MỚI THÊM: gọi khi bấm "Xóa đoạn chat" trong menu của nút "...".
+  // Optional để không phá interface ở chỗ khác lỡ đang dùng ChatCard mà
+  // chưa truyền prop này (vd GroupChatCard nếu có).
+  onDelete?: (id: string) => void;
 }
 
 const ChatCard = ({
@@ -22,12 +32,13 @@ const ChatCard = ({
   unreadCount,
   leftSection,
   subtitle,
+  onDelete,
 }: ChatCardProps) => {
   return (
     <Card
       key={convoId}
       className={cn(
-        "border-none p-3 cursor-pointer transition-smooth glass hover:bg-muted/30",
+        "group border-none p-3 cursor-pointer transition-smooth glass hover:bg-muted/30",
         isActive &&
           "ring-2 ring-primary/50 bg-gradient-to-tr from-primary-glow/10 to-primary-foreground"
       )}
@@ -54,7 +65,36 @@ const ChatCard = ({
 
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1 flex-1 min-w-0">{subtitle}</div>
-            <MoreHorizontal className="size-4 text-muted-foreground opacity-0 group-hover:opacity-100 hover:size-5 transition-smooth" />
+
+            {onDelete ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    // chặn không cho click nổi lên Card (sẽ trigger onSelect)
+                    onClick={(e) => e.stopPropagation()}
+                    className="opacity-0 group-hover:opacity-100 transition-smooth rounded-full p-0.5 hover:bg-muted shrink-0"
+                    aria-label="Tùy chọn đoạn chat"
+                  >
+                    <MoreHorizontal className="size-4 text-muted-foreground" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onClick={() => onDelete(convoId)}
+                  >
+                    <Trash2 className="size-4" />
+                    Xóa đoạn chat
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <MoreHorizontal className="size-4 text-muted-foreground opacity-0 group-hover:opacity-100 hover:size-5 transition-smooth" />
+            )}
           </div>
         </div>
       </div>

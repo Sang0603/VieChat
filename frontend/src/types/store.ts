@@ -91,6 +91,9 @@ export interface ChatState {
   ) => void;
   // 👇 MỚI THÊM: gọi API thả/đổi/gỡ reaction cho 1 tin nhắn
   toggleReaction: (messageId: string, emoji: string) => Promise<void>;
+  // 👇 MỚI THÊM: xóa (ẩn) đoạn chat phía user hiện tại — không xóa dữ liệu
+  // thật, chỉ ẩn khỏi sidebar của họ
+  hideConversation: (conversationId: string) => Promise<void>;
   // 👇 MỚI THÊM: cập nhật trạng thái đang gõ của 1 user trong 1 conversation
   // (gọi khi nhận socket "typing:start"/"typing:stop")
   setUserTyping: (

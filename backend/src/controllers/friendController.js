@@ -140,10 +140,15 @@ export const acceptFriendRequest = async (req, res) => {
         .json({ message: "Bạn không có quyền chấp nhận lời mời này" });
     }
 
-    await Friend.create({
-      userA: request.from,
-      userB: request.to,
-    });
+    // 🔧 FIX: đã sort userA/userB trước khi tạo Friend (giống mọi chỗ khác
+    // trong file này) — trước đây tạo trực tiếp userA: request.from,
+    // userB: request.to mà không sort, khiến middleware checkFriendship
+    // (query có sort) không tìm thấy record, báo "chưa kết bạn" sai
+    let userA = request.from.toString();
+    let userB = request.to.toString();
+    if (userA > userB) [userA, userB] = [userB, userA];
+
+    await Friend.create({ userA, userB });
 
     let conversation = await Conversation.findOne({
       type: "direct",
@@ -166,12 +171,15 @@ export const acceptFriendRequest = async (req, res) => {
       select: "displayName avatarUrl",
     });
 
-    const participants = (conversation.participants || []).map((p) => ({
-      _id: p.userId?._id,
-      displayName: p.userId?.displayName,
-      avatarUrl: p.userId?.avatarUrl ?? null,
-      joinedAt: p.joinedAt,
-    }));
+    // 🔧 FIX: lọc bỏ participant mà user đã bị xóa khỏi DB (populate trả về null)
+    const participants = (conversation.participants || [])
+      .filter((p) => p.userId)
+      .map((p) => ({
+        _id: p.userId._id,
+        displayName: p.userId.displayName,
+        avatarUrl: p.userId.avatarUrl ?? null,
+        joinedAt: p.joinedAt,
+      }));
 
     const formattedConversation = { ...conversation.toObject(), participants };
 

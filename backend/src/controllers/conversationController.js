@@ -67,12 +67,16 @@ export const createConversation = async (req, res) => {
       { path: "lastMessage.senderId", select: "displayName avatarUrl" },
     ]);
 
-    const participants = (conversation.participants || []).map((p) => ({
-      _id: p.userId?._id,
-      displayName: p.userId?.displayName,
-      avatarUrl: p.userId?.avatarUrl ?? null,
-      joinedAt: p.joinedAt,
-    }));
+    // 🔧 FIX: lọc bỏ participant mà user đã bị xóa khỏi DB (populate trả về null),
+    // tránh gửi xuống frontend participant có _id undefined gây crash MessageItem.tsx
+    const participants = (conversation.participants || [])
+      .filter((p) => p.userId)
+      .map((p) => ({
+        _id: p.userId._id,
+        displayName: p.userId.displayName,
+        avatarUrl: p.userId.avatarUrl ?? null,
+        joinedAt: p.joinedAt,
+      }));
 
     const formatted = { ...conversation.toObject(), participants };
 
@@ -99,6 +103,8 @@ export const getConversations = async (req, res) => {
     const userId = req.user._id;
     const conversations = await Conversation.find({
       "participants.userId": userId,
+      // 🆕 MỚI THÊM: không trả về những đoạn chat mà user này đã "xóa" (ẩn)
+      hiddenFor: { $ne: userId },
     })
       .sort({ lastMessageAt: -1, updatedAt: -1 })
       .populate({
@@ -115,12 +121,15 @@ export const getConversations = async (req, res) => {
       });
 
     const formatted = conversations.map((convo) => {
-      const participants = (convo.participants || []).map((p) => ({
-        _id: p.userId?._id,
-        displayName: p.userId?.displayName,
-        avatarUrl: p.userId?.avatarUrl ?? null,
-        joinedAt: p.joinedAt,
-      }));
+      // 🔧 FIX: lọc bỏ participant mà user đã bị xóa khỏi DB (populate trả về null)
+      const participants = (convo.participants || [])
+        .filter((p) => p.userId)
+        .map((p) => ({
+          _id: p.userId._id,
+          displayName: p.userId.displayName,
+          avatarUrl: p.userId.avatarUrl ?? null,
+          joinedAt: p.joinedAt,
+        }));
 
       return {
         ...convo.toObject(),
@@ -264,6 +273,42 @@ export const markAsSeen = async (req, res) => {
     });
   } catch (error) {
     console.error("Lỗi khi mark as seen", error);
+    return res.status(500).json({ message: "Lỗi hệ thống" });
+  }
+};
+
+// 🆕 MỚI THÊM: "xóa" đoạn chat phía user hiện tại — chỉ ẩn khỏi sidebar của
+// họ, không xóa message/conversation thật, không ảnh hưởng người còn lại.
+// Nếu có tin nhắn mới gửi tới sau đó, hàm gửi tin nhắn (messageController)
+// cần $pull userId ra khỏi hiddenFor để đoạn chat tự hiện lại (giống Messenger).
+export const hideConversation = async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const userId = req.user._id;
+
+    const conversation = await Conversation.findById(conversationId).lean();
+
+    if (!conversation) {
+      return res.status(404).json({ message: "Không tìm thấy cuộc trò chuyện" });
+    }
+
+    const isMember = (conversation.participants || []).some(
+      (p) => p.userId.toString() === userId.toString()
+    );
+
+    if (!isMember) {
+      return res
+        .status(403)
+        .json({ message: "Bạn không ở trong đoạn chat này" });
+    }
+
+    await Conversation.findByIdAndUpdate(conversationId, {
+      $addToSet: { hiddenFor: userId },
+    });
+
+    return res.status(200).json({ message: "Đã xóa đoạn chat" });
+  } catch (error) {
+    console.error("Lỗi khi xóa đoạn chat", error);
     return res.status(500).json({ message: "Lỗi hệ thống" });
   }
 };

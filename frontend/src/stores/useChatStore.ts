@@ -274,6 +274,28 @@ export const useChatStore = create<ChatState>()(
         }
       },
 
+      // 🆕 MỚI THÊM: xóa (ẩn) đoạn chat phía mình khỏi sidebar.
+      // Gọi API trước, chỉ xóa khỏi state khi API thành công. Nếu đoạn chat
+      // đang được mở, bỏ chọn nó luôn để ChatWindow quay về màn hình chào.
+      hideConversation: async (conversationId) => {
+        try {
+          await chatService.hideConversation(conversationId);
+
+          set((state) => ({
+            conversations: state.conversations.filter(
+              (c) => c._id !== conversationId
+            ),
+            activeConversationId:
+              state.activeConversationId === conversationId
+                ? null
+                : state.activeConversationId,
+          }));
+        } catch (error) {
+          console.error("Lỗi xảy ra khi xóa đoạn chat", error);
+          throw error;
+        }
+      },
+
       // ==================== 👇 MỚI THÊM: TYPING INDICATOR ====================
       // typingUser chỉ cần userId là bắt buộc, displayName optional (khi ngừng
       // gõ, server không gửi kèm displayName nên không cần).

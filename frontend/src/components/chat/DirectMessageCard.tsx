@@ -13,8 +13,13 @@ import FriendProfileDialog from "./FriendProfileDialog";
 
 const DirectMessageCard = ({ convo }: { convo: Conversation }) => {
   const { user } = useAuthStore();
-  const { activeConversationId, setActiveConversation, messages, fetchMessages } =
-    useChatStore();
+  const {
+    activeConversationId,
+    setActiveConversation,
+    messages,
+    fetchMessages,
+    hideConversation,
+  } = useChatStore();
   const { onlineUsers } = useSocketStore();
 
   // dialog xem thông tin bạn bè khi bấm vào avatar — tách riêng khỏi việc
@@ -43,6 +48,13 @@ const DirectMessageCard = ({ convo }: { convo: Conversation }) => {
     setProfileOpen(true);
   };
 
+  // 🆕 MỚI THÊM: xóa đoạn chat khỏi sidebar phía mình (không xóa phía bạn kia)
+  const handleDeleteConversation = (id: string) => {
+    hideConversation(id).catch(() => {
+      // lỗi đã log trong store, ở đây chỉ chặn không cho crash UI
+    });
+  };
+
   return (
     <>
       <ChatCard
@@ -55,6 +67,7 @@ const DirectMessageCard = ({ convo }: { convo: Conversation }) => {
         }
         isActive={activeConversationId === convo._id}
         onSelect={handleSelectConversation}
+        onDelete={handleDeleteConversation}
         unreadCount={unreadCount}
         leftSection={
           <>

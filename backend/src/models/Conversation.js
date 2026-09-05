@@ -86,6 +86,15 @@ const conversationSchema = new mongoose.Schema(
       of: Number,
       default: {},
     },
+    // 🆕 MỚI THÊM: danh sách user đã "xóa" (ẩn) đoạn chat này phía họ.
+    // Không xóa conversation/message thật — chỉ ẩn khỏi sidebar của user đó.
+    // Nếu có tin nhắn mới tới, sẽ tự bỏ user đó ra khỏi hiddenFor (hiện lại).
+    hiddenFor: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
   },
   {
     timestamps: true,
