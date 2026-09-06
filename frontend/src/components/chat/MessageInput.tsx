@@ -2,7 +2,7 @@ import { useAuthStore } from "@/stores/useAuthStore";
 import type { Conversation } from "@/types/chat";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../ui/button";
-import { ImagePlus, Send, X, Loader2, Reply, ShieldBan } from "lucide-react";
+import { ImagePlus, Send, X, Loader2, Reply, ShieldBan, Image, Video } from "lucide-react";
 import { Input } from "../ui/input";
 import EmojiPicker from "./EmojiPicker";
 import { useChatStore } from "@/stores/useChatStore";
@@ -10,6 +10,12 @@ import { useSocketStore } from "@/stores/useSocketStore";
 import { useFriendStore } from "@/stores/useFriendStore";
 import { chatService } from "@/services/chatService";
 import { toast } from "sonner";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB, khớp với giới hạn backend
 const MAX_VIDEO_SIZE = 300 * 1024 * 1024; // 300MB, khớp với giới hạn backend
@@ -26,14 +32,15 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
   const [value, setValue] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-  // 👇 MỚI THÊM: state cho video (thay cho nút riêng trước đây)
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoPreview, setVideoPreview] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [sending, setSending] = useState(false);
 
-  // 👇 dùng chung 1 input, accept cả ảnh lẫn video
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  // 👇 MỚI THÊM: 2 input riêng biệt (ẩn), mỗi cái accept đúng 1 loại,
+  // để hệ điều hành hiện picker rõ ràng đúng loại - không gộp mập mờ nữa
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
 
   const isTypingRef = useRef(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -89,42 +96,56 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
     }
   };
 
-  const handlePickFile = () => {
-    fileInputRef.current?.click();
+  // 👇 MỚI THÊM: mở đúng input tương ứng theo lựa chọn trong dropdown
+  const handlePickImage = () => {
+    imageInputRef.current?.click();
   };
 
-  // 👇 MỚI THÊM: 1 hàm xử lý chung, tự phân biệt ảnh/video theo file.type
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePickVideo = () => {
+    videoInputRef.current?.click();
+  };
+
+  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = ""; // cho phép chọn lại cùng 1 file lần sau
 
     if (!file) return;
 
-    if (file.type.startsWith("image/")) {
-      if (file.size > MAX_IMAGE_SIZE) {
-        toast.error("Ảnh không được vượt quá 5MB");
-        return;
-      }
-
-      clearVideo(); // chỉ cho gửi 1 loại đính kèm mỗi lần
-      setImageFile(file);
-      setImagePreview(URL.createObjectURL(file));
+    if (!file.type.startsWith("image/")) {
+      toast.error("Chỉ có thể gửi file ảnh");
       return;
     }
 
-    if (file.type.startsWith("video/")) {
-      if (file.size > MAX_VIDEO_SIZE) {
-        toast.error("Video không được vượt quá 300MB");
-        return;
-      }
-
-      clearImage(); // chỉ cho gửi 1 loại đính kèm mỗi lần
-      setVideoFile(file);
-      setVideoPreview(URL.createObjectURL(file));
+    if (file.size > MAX_IMAGE_SIZE) {
+      toast.error("Ảnh không được vượt quá 5MB");
       return;
     }
 
-    toast.error("Chỉ có thể gửi file ảnh hoặc video");
+    clearVideo(); // chỉ cho gửi 1 loại đính kèm mỗi lần
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+  };
+
+  // 👇 MỚI THÊM: xử lý riêng cho video
+  const handleVideoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+
+    if (!file) return;
+
+    if (!file.type.startsWith("video/")) {
+      toast.error("Chỉ có thể gửi file video");
+      return;
+    }
+
+    if (file.size > MAX_VIDEO_SIZE) {
+      toast.error("Video không được vượt quá 300MB");
+      return;
+    }
+
+    clearImage(); // chỉ cho gửi 1 loại đính kèm mỗi lần
+    setVideoFile(file);
+    setVideoPreview(URL.createObjectURL(file));
   };
 
   const clearImage = () => {
@@ -133,7 +154,6 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
     setImagePreview(null);
   };
 
-  // 👇 MỚI THÊM
   const clearVideo = () => {
     if (videoPreview) URL.revokeObjectURL(videoPreview);
     setVideoFile(null);
@@ -341,25 +361,45 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
       )}
 
       <div className="flex items-center gap-2">
-        {/* 👇 MỚI THÊM: 1 input duy nhất, accept cả ảnh lẫn video */}
+        {/* 👇 MỚI THÊM: 2 input ẩn riêng biệt, mỗi cái accept đúng 1 loại */}
         <input
-          ref={fileInputRef}
+          ref={imageInputRef}
           type="file"
-          accept="image/*,video/*"
+          accept="image/*"
           className="hidden"
-          onChange={handleFileChange}
+          onChange={handleImageFileChange}
+        />
+        <input
+          ref={videoInputRef}
+          type="file"
+          accept="video/*"
+          className="hidden"
+          onChange={handleVideoFileChange}
         />
 
-        {/* 👇 MỚI THÊM: 1 nút duy nhất thay cho 2 nút riêng trước đây */}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={handlePickFile}
-          disabled={sending}
-          className="hover:bg-primary/10 transition-smooth"
-        >
-          <ImagePlus className="size-4" />
-        </Button>
+        {/* 👇 MỚI THÊM: 1 nút duy nhất, bấm vào hiện dropdown "Ảnh" / "Video" */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              disabled={sending}
+              className="hover:bg-primary/10 transition-smooth"
+            >
+              <ImagePlus className="size-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent side="top" align="start">
+            <DropdownMenuItem onClick={handlePickImage} className="gap-2">
+              <Image className="size-4" />
+              Ảnh
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handlePickVideo} className="gap-2">
+              <Video className="size-4" />
+              Video
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         <div className="flex-1 relative">
           <Input
