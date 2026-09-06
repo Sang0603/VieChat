@@ -2,7 +2,7 @@ import { useAuthStore } from "@/stores/useAuthStore";
 import type { Conversation } from "@/types/chat";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../ui/button";
-import { ImagePlus, Send, X, Loader2, Reply, ShieldBan, Video } from "lucide-react";
+import { ImagePlus, Send, X, Loader2, Reply, ShieldBan } from "lucide-react";
 import { Input } from "../ui/input";
 import EmojiPicker from "./EmojiPicker";
 import { useChatStore } from "@/stores/useChatStore";
@@ -13,7 +13,7 @@ import { toast } from "sonner";
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB, khớp với giới hạn backend
 const MAX_VIDEO_SIZE = 300 * 1024 * 1024; // 300MB, khớp với giới hạn backend
-const TYPING_STOP_DELAY = 2000;
+const TYPING_STOP_DELAY = 2000; // ms - sau 2s ngừng gõ thì coi như đã ngừng "đang nhập"
 
 const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
   const { user } = useAuthStore();
@@ -26,14 +26,14 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
   const [value, setValue] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-  // 👇 MỚI THÊM: state cho video
+  // 👇 MỚI THÊM: state cho video (thay cho nút riêng trước đây)
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoPreview, setVideoPreview] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [sending, setSending] = useState(false);
 
+  // 👇 dùng chung 1 input, accept cả ảnh lẫn video
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const videoInputRef = useRef<HTMLInputElement>(null); // 👈 MỚI THÊM
 
   const isTypingRef = useRef(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -89,56 +89,42 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
     }
   };
 
-  const handlePickImage = () => {
+  const handlePickFile = () => {
     fileInputRef.current?.click();
   };
 
-  // 👇 MỚI THÊM
-  const handlePickVideo = () => {
-    videoInputRef.current?.click();
-  };
-
+  // 👇 MỚI THÊM: 1 hàm xử lý chung, tự phân biệt ảnh/video theo file.type
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    e.target.value = "";
+    e.target.value = ""; // cho phép chọn lại cùng 1 file lần sau
 
     if (!file) return;
 
-    if (!file.type.startsWith("image/")) {
-      toast.error("Chỉ có thể gửi file ảnh");
+    if (file.type.startsWith("image/")) {
+      if (file.size > MAX_IMAGE_SIZE) {
+        toast.error("Ảnh không được vượt quá 5MB");
+        return;
+      }
+
+      clearVideo(); // chỉ cho gửi 1 loại đính kèm mỗi lần
+      setImageFile(file);
+      setImagePreview(URL.createObjectURL(file));
       return;
     }
 
-    if (file.size > MAX_IMAGE_SIZE) {
-      toast.error("Ảnh không được vượt quá 5MB");
+    if (file.type.startsWith("video/")) {
+      if (file.size > MAX_VIDEO_SIZE) {
+        toast.error("Video không được vượt quá 300MB");
+        return;
+      }
+
+      clearImage(); // chỉ cho gửi 1 loại đính kèm mỗi lần
+      setVideoFile(file);
+      setVideoPreview(URL.createObjectURL(file));
       return;
     }
 
-    clearVideo(); // 👈 chỉ cho gửi 1 loại đính kèm mỗi lần
-    setImageFile(file);
-    setImagePreview(URL.createObjectURL(file));
-  };
-
-  // 👇 MỚI THÊM: chọn video
-  const handleVideoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-
-    if (!file) return;
-
-    if (!file.type.startsWith("video/")) {
-      toast.error("Chỉ có thể gửi file video");
-      return;
-    }
-
-    if (file.size > MAX_VIDEO_SIZE) {
-      toast.error("Video không được vượt quá 300MB");
-      return;
-    }
-
-    clearImage(); // 👈 chỉ cho gửi 1 loại đính kèm mỗi lần
-    setVideoFile(file);
-    setVideoPreview(URL.createObjectURL(file));
+    toast.error("Chỉ có thể gửi file ảnh hoặc video");
   };
 
   const clearImage = () => {
@@ -158,19 +144,19 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
     if (isBlocked) return;
 
     const trimmed = value.trim();
-    if (!trimmed && !imageFile && !videoFile) return; // 👈 thêm videoFile
+    if (!trimmed && !imageFile && !videoFile) return;
     if (sending) return;
 
     const currValue = trimmed;
     const currFile = imageFile;
     const currPreview = imagePreview;
-    const currVideoFile = videoFile; // 👈 MỚI THÊM
-    const currVideoPreview = videoPreview; // 👈 MỚI THÊM
+    const currVideoFile = videoFile;
+    const currVideoPreview = videoPreview;
     const currReplyTo = replyingTo;
 
     setValue("");
     clearImage();
-    clearVideo(); // 👈 MỚI THÊM
+    clearVideo();
     clearReplyingTo();
     stopTypingImmediately();
     setSending(true);
@@ -185,7 +171,6 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
         imgUrl = await chatService.uploadMessageImage(currFile);
       }
 
-      // 👇 MỚI THÊM: upload video kèm progress
       if (currVideoFile) {
         setUploadProgress(0);
         videoInfo = await chatService.uploadMessageVideo(currVideoFile, (pct) =>
@@ -202,7 +187,7 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
           currValue,
           imgUrl,
           currReplyTo?._id,
-          videoInfo // 👈 MỚI THÊM — cần sửa signature action này trong useChatStore
+          videoInfo
         );
       } else {
         await sendGroupMessage(
@@ -210,7 +195,7 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
           currValue,
           imgUrl,
           currReplyTo?._id,
-          videoInfo // 👈 MỚI THÊM — cần sửa signature action này trong useChatStore
+          videoInfo
         );
       }
     } catch (error: any) {
@@ -239,8 +224,8 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
         setImagePreview(currPreview);
       }
       if (currVideoFile) {
-        setVideoFile(currVideoFile); // 👈 MỚI THÊM
-        setVideoPreview(currVideoPreview); // 👈 MỚI THÊM
+        setVideoFile(currVideoFile);
+        setVideoPreview(currVideoPreview);
       }
       if (currReplyTo) {
         useChatStore.getState().setReplyingTo(currReplyTo);
@@ -329,7 +314,6 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
         </div>
       )}
 
-      {/* 👇 MỚI THÊM: preview video + progress bar khi đang upload */}
       {videoPreview && (
         <div className="relative w-fit">
           <video
@@ -357,41 +341,24 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
       )}
 
       <div className="flex items-center gap-2">
+        {/* 👇 MỚI THÊM: 1 input duy nhất, accept cả ảnh lẫn video */}
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*"
+          accept="image/*,video/*"
           className="hidden"
           onChange={handleFileChange}
         />
-        {/* 👇 MỚI THÊM */}
-        <input
-          ref={videoInputRef}
-          type="file"
-          accept="video/*"
-          className="hidden"
-          onChange={handleVideoFileChange}
-        />
 
+        {/* 👇 MỚI THÊM: 1 nút duy nhất thay cho 2 nút riêng trước đây */}
         <Button
           variant="ghost"
           size="icon"
-          onClick={handlePickImage}
+          onClick={handlePickFile}
           disabled={sending}
           className="hover:bg-primary/10 transition-smooth"
         >
           <ImagePlus className="size-4" />
-        </Button>
-
-        {/* 👇 MỚI THÊM: nút chọn video */}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={handlePickVideo}
-          disabled={sending}
-          className="hover:bg-primary/10 transition-smooth"
-        >
-          <Video className="size-4" />
         </Button>
 
         <div className="flex-1 relative">
