@@ -62,7 +62,7 @@ export interface ReplyPreview {
   senderName?: string;
 }
 
-// 👇 MỚI THÊM: 1 reaction của 1 user trên 1 tin nhắn
+// 👇 1 reaction của 1 user trên 1 tin nhắn
 export interface MessageReaction {
   userId: string;
   emoji: string;
@@ -82,9 +82,16 @@ export interface Message {
   callInfo?: CallInfo;
   // tin nhắn đang được trả lời (nếu có)
   replyTo?: ReplyPreview | null;
-  // 👇 MỚI THÊM: danh sách reaction hiện có trên tin nhắn
+  // 👇 danh sách reaction hiện có trên tin nhắn
   reactions?: MessageReaction[];
-  // 👇 MỚI THÊM: true khi tin này thực ra KHÔNG được gửi đi (do người nhận đã
+  // true khi tin này thực ra KHÔNG được gửi đi (do người nhận đã
   // chặn mình) - backend trả về bản giả chỉ để hiện phía người gửi, không lưu DB
   blocked?: boolean;
+  // 🆕 MỚI THÊM: trạng thái optimistic update phía client — "sending" khi
+  // tin vừa bấm gửi còn đang chờ server xác nhận (dùng _id tạm dạng
+  // "temp-..."), "sent" sau khi server xác nhận, "failed" nếu gửi lỗi (tin
+  // sẽ bị xoá khỏi state ngay khi failed, field này chỉ để phòng UI cần
+  // hiện trạng thái tức thời trước khi bị xoá). Optional để không phá các
+  // tin nhắn cũ lấy từ lịch sử (không có field này).
+  status?: "sending" | "sent" | "failed";
 }

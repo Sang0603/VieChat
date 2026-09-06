@@ -1,10 +1,14 @@
 import { chatService } from "@/services/chatService";
 import type { ChatState } from "@/types/store";
-import type { Conversation, ReplyPreview } from "@/types/chat";
+import type { Conversation, Message, ReplyPreview } from "@/types/chat";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { useAuthStore } from "./useAuthStore";
 import { useSocketStore } from "./useSocketStore";
+
+// 🆕 MỚI THÊM: sinh ID tạm cho tin nhắn optimistic, đủ để không trùng
+// với ID thật của MongoDB (không bắt đầu bằng "temp-")
+const genTempId = () => `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 export const useChatStore = create<ChatState>()(
   persist(
@@ -16,7 +20,7 @@ export const useChatStore = create<ChatState>()(
       messageLoading: false,
       loading: false,
       replyingTo: null,
-      typingUsers: {}, // 👈 MỚI THÊM: { [conversationId]: { userId, displayName }[] }
+      typingUsers: {}, // { [conversationId]: { userId, displayName }[] }
 
       setActiveConversation: (id) => set({ activeConversationId: id }),
       setReplyingTo: (message: ReplyPreview | null) => set({ replyingTo: message }),
@@ -29,7 +33,7 @@ export const useChatStore = create<ChatState>()(
           convoLoading: false,
           messageLoading: false,
           replyingTo: null,
-          typingUsers: {}, // 👈 MỚI THÊM
+          typingUsers: {},
         });
       },
       fetchConversations: async () => {
@@ -91,35 +95,210 @@ export const useChatStore = create<ChatState>()(
           set({ messageLoading: false });
         }
       },
-      // 👇 SỬA: backend không còn trả tin giả khi bị chặn, mà trả lỗi 403
-      // ({ blocked: true, blockedByMe, blockedMe }) -> ném lại lỗi để
-      // MessageInput bắt được, đồng bộ lại trạng thái chặn và khôi phục nội
-      // dung tin nhắn cho người dùng gõ lại (không optimistic-add nữa)
+      // 🔧 FIX: trước đây gửi tin nhắn phải chờ trọn vẹn round-trip (HTTP
+      // response -> rồi chờ socket "new-message" echo về -> mới add vào
+      // UI) nên luôn có độ trễ dù mạng tốt. Giờ thêm optimistic update:
+      // hiện tin nhắn ngay lập tức với _id tạm ("temp-..."), rồi thay bằng
+      // tin nhắn thật khi server xác nhận. Có xử lý race-condition: nếu
+      // socket "new-message" (addMessage) đến TRƯỚC khi HTTP response về
+      // (tin thật đã có sẵn trong state) thì chỉ xoá tin tạm, không tạo
+      // trùng; nếu gửi thất bại thì xoá tin tạm để MessageInput khôi phục
+      // lại nội dung cho người dùng gõ lại.
       sendDirectMessage: async (recipientId, content, imgUrl, replyTo) => {
-        const { activeConversationId } = get();
-        const message = await chatService.sendDirectMessage(
-          recipientId,
-          content,
-          imgUrl,
-          activeConversationId || undefined,
-          replyTo
-        );
+        const { activeConversationId, replyingTo } = get();
+        const { user } = useAuthStore.getState();
+        const convoId = activeConversationId;
+        const tempId = genTempId();
 
-        set((state) => ({
-          conversations: state.conversations.map((c) =>
-            c._id === activeConversationId ? { ...c, seenBy: [] } : c
-          ),
-        }));
+        if (convoId && user) {
+          const optimisticMessage: Message = {
+            _id: tempId,
+            conversationId: convoId,
+            senderId: user._id,
+            content: content || null,
+            imgUrl,
+            createdAt: new Date().toISOString(),
+            isOwn: true,
+            status: "sending",
+            replyTo: replyingTo ?? undefined,
+          };
 
-        return message;
+          set((state) => {
+            const current = state.messages[convoId] ?? {
+              items: [],
+              hasMore: false,
+              nextCursor: null,
+            };
+
+            return {
+              messages: {
+                ...state.messages,
+                [convoId]: {
+                  ...current,
+                  items: [...current.items, optimisticMessage],
+                },
+              },
+            };
+          });
+        }
+
+        try {
+          const message = await chatService.sendDirectMessage(
+            recipientId,
+            content,
+            imgUrl,
+            convoId || undefined,
+            replyTo
+          );
+
+          if (convoId) {
+            set((state) => {
+              const current = state.messages[convoId];
+              if (!current) return state;
+
+              // nếu socket đã echo tin thật về trước rồi -> chỉ cần bỏ tin
+              // tạm, tránh hiện trùng 2 bong bóng cho cùng 1 tin nhắn
+              const alreadyHasReal = current.items.some(
+                (m) => m._id === message._id
+              );
+
+              const items = alreadyHasReal
+                ? current.items.filter((m) => m._id !== tempId)
+                : current.items.map((m) =>
+                    m._id === tempId
+                      ? { ...message, isOwn: true, status: "sent" as const }
+                      : m
+                  );
+
+              return {
+                messages: {
+                  ...state.messages,
+                  [convoId]: { ...current, items },
+                },
+              };
+            });
+
+            set((state) => ({
+              conversations: state.conversations.map((c) =>
+                c._id === convoId ? { ...c, seenBy: [] } : c
+              ),
+            }));
+          }
+
+          return message;
+        } catch (error) {
+          // gửi thất bại -> xoá tin nhắn tạm, để MessageInput khôi phục lại
+          // nội dung cho người dùng gõ lại (logic có sẵn trong catch của nó)
+          if (convoId) {
+            set((state) => {
+              const current = state.messages[convoId];
+              if (!current) return state;
+
+              return {
+                messages: {
+                  ...state.messages,
+                  [convoId]: {
+                    ...current,
+                    items: current.items.filter((m) => m._id !== tempId),
+                  },
+                },
+              };
+            });
+          }
+          throw error;
+        }
       },
       sendGroupMessage: async (conversationId, content, imgUrl, replyTo) => {
-        await chatService.sendGroupMessage(conversationId, content, imgUrl, replyTo);
-        set((state) => ({
-          conversations: state.conversations.map((c) =>
-            c._id === get().activeConversationId ? { ...c, seenBy: [] } : c
-          ),
-        }));
+        const { replyingTo } = get();
+        const { user } = useAuthStore.getState();
+        const tempId = genTempId();
+
+        if (user) {
+          const optimisticMessage: Message = {
+            _id: tempId,
+            conversationId,
+            senderId: user._id,
+            content: content || null,
+            imgUrl,
+            createdAt: new Date().toISOString(),
+            isOwn: true,
+            status: "sending",
+            replyTo: replyingTo ?? undefined,
+          };
+
+          set((state) => {
+            const current = state.messages[conversationId] ?? {
+              items: [],
+              hasMore: false,
+              nextCursor: null,
+            };
+
+            return {
+              messages: {
+                ...state.messages,
+                [conversationId]: {
+                  ...current,
+                  items: [...current.items, optimisticMessage],
+                },
+              },
+            };
+          });
+        }
+
+        try {
+          const message = await chatService.sendGroupMessage(
+            conversationId,
+            content,
+            imgUrl,
+            replyTo
+          );
+
+          set((state) => {
+            const current = state.messages[conversationId];
+            if (!current) return state;
+
+            const alreadyHasReal = current.items.some(
+              (m) => m._id === message._id
+            );
+
+            const items = alreadyHasReal
+              ? current.items.filter((m) => m._id !== tempId)
+              : current.items.map((m) =>
+                  m._id === tempId
+                    ? { ...message, isOwn: true, status: "sent" as const }
+                    : m
+                );
+
+            return {
+              messages: {
+                ...state.messages,
+                [conversationId]: { ...current, items },
+              },
+            };
+          });
+
+          set((state) => ({
+            conversations: state.conversations.map((c) =>
+              c._id === get().activeConversationId ? { ...c, seenBy: [] } : c
+            ),
+          }));
+        } catch (error) {
+          set((state) => {
+            const current = state.messages[conversationId];
+            if (!current) return state;
+
+            return {
+              messages: {
+                ...state.messages,
+                [conversationId]: {
+                  ...current,
+                  items: current.items.filter((m) => m._id !== tempId),
+                },
+              },
+            };
+          });
+          throw error;
+        }
       },
       addMessage: async (message) => {
         try {
@@ -237,7 +416,7 @@ export const useChatStore = create<ChatState>()(
         }
       },
 
-      // 👇 MỚI THÊM: cập nhật reactions của 1 message trong state
+      // cập nhật reactions của 1 message trong state
       // (dùng chung cho cả optimistic update lúc bấm và khi nhận socket từ người khác)
       updateMessageReaction: (conversationId, messageId, reactions) => {
         set((state) => {
@@ -259,7 +438,7 @@ export const useChatStore = create<ChatState>()(
         });
       },
 
-      // 👇 MỚI THÊM: gọi API thả/đổi/gỡ reaction rồi cập nhật state cho tin nhắn
+      // gọi API thả/đổi/gỡ reaction rồi cập nhật state cho tin nhắn
       // đang thuộc conversation đang mở
       toggleReaction: async (messageId, emoji) => {
         try {
@@ -274,7 +453,7 @@ export const useChatStore = create<ChatState>()(
         }
       },
 
-      // 🆕 MỚI THÊM: xóa (ẩn) đoạn chat phía mình khỏi sidebar.
+      // xóa (ẩn) đoạn chat phía mình khỏi sidebar.
       // Gọi API trước, chỉ xóa khỏi state khi API thành công. Nếu đoạn chat
       // đang được mở, bỏ chọn nó luôn để ChatWindow quay về màn hình chào.
       hideConversation: async (conversationId) => {
@@ -296,7 +475,7 @@ export const useChatStore = create<ChatState>()(
         }
       },
 
-      // ==================== 👇 MỚI THÊM: TYPING INDICATOR ====================
+      // ==================== TYPING INDICATOR ====================
       // typingUser chỉ cần userId là bắt buộc, displayName optional (khi ngừng
       // gõ, server không gửi kèm displayName nên không cần).
       setUserTyping: (conversationId, typingUser, isTyping) => {
