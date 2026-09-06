@@ -337,10 +337,10 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
       {videoPreview && (
         <div className="relative w-fit">
           <video
-            src={videoPreview}
-            className="h-20 w-32 object-cover rounded-lg border border-border/50"
-            muted
-          />
+          src={videoPreview}
+          className="h-20 w-32 object-cover rounded-lg border border-border/50"
+          controls   // 👈 thêm controls để có thể bấm nghe thử trước khi gửi
+        />
           <button
             type="button"
             onClick={clearVideo}

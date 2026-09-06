@@ -2,6 +2,7 @@
 // Khung nhỏ nổi Ở GIỮA màn hình, đồng bộ phong cách nhỏ gọn với CallWindow.tsx.
 // Hiển thị đúng label "Cuộc gọi video đến" hoặc "Cuộc gọi thoại đến" theo callType.
 
+import { useEffect, useRef } from "react";
 import { Phone, Video } from "lucide-react";
 import { useCallStore } from "@/stores/useCallStore";
 
@@ -13,10 +14,50 @@ interface IncomingCallModalProps {
 export default function IncomingCallModal({ onAccept, onReject }: IncomingCallModalProps) {
   const { status, peer, callType } = useCallStore();
 
+  // 👇 MỚI THÊM: nhạc chuông. Component này KHÔNG unmount khi cuộc gọi kết
+  // thúc (nó chỉ return null sớm bên dưới), nên phải theo dõi trực tiếp
+  // `status` trong dependency array để biết chính xác lúc nào cần dừng -
+  // không thể dựa vào cleanup của useEffect([]) vì lúc đó sẽ không chạy.
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    if (status === "incoming") {
+      const audio = new Audio("/sounds/ringtone.mp3");
+      audio.loop = true;
+      audioRef.current = audio;
+
+      audio.play().catch((err) => {
+        // Trình duyệt có thể chặn autoplay nếu tab chưa có tương tác
+        // người dùng nào trước đó - không throw, chỉ log để biết.
+        console.warn("Không thể tự phát nhạc chuông:", err);
+      });
+    }
+
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+        audioRef.current = null;
+      }
+    };
+  }, [status]);
+
   if (status !== "incoming" || !peer) return null;
 
   const isVideoCall = callType === "video";
   const label = isVideoCall ? "Cuộc gọi video đến" : "Cuộc gọi thoại đến";
+
+  // 👇 MỚI THÊM: dừng nhạc chuông ngay lập tức khi bấm nhận/từ chối, không
+  // cần đợi effect cleanup chạy theo re-render (phản hồi tức thì hơn)
+  const handleAccept = () => {
+    audioRef.current?.pause();
+    onAccept();
+  };
+
+  const handleReject = () => {
+    audioRef.current?.pause();
+    onReject();
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
@@ -62,14 +103,14 @@ export default function IncomingCallModal({ onAccept, onReject }: IncomingCallMo
         {/* Thanh điều khiển */}
         <div className="flex items-center justify-center gap-10 bg-black/40 py-3">
           <button
-            onClick={onReject}
+            onClick={handleReject}
             className="flex h-10 w-10 items-center justify-center rounded-full bg-red-600 text-white shadow-lg transition hover:bg-red-700"
             aria-label="Từ chối"
           >
             <Phone className="h-4 w-4 rotate-[135deg]" fill="currentColor" strokeWidth={0} />
           </button>
           <button
-            onClick={onAccept}
+            onClick={handleAccept}
             className="flex h-10 w-10 items-center justify-center rounded-full bg-green-600 text-white shadow-lg transition hover:bg-green-700 animate-pulse"
             aria-label="Chấp nhận"
           >
