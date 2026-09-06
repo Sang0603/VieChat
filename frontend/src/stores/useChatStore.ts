@@ -9,14 +9,6 @@ import { useSocketStore } from "./useSocketStore";
 // 🆕 MỚI THÊM: sinh ID tạm cho tin nhắn optimistic, đủ để không trùng
 // với ID thật của MongoDB (không bắt đầu bằng "temp-")
 const genTempId = () => `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-
-// 👇 MỚI THÊM: thông tin video sau khi upload xong lên Cloudinary
-interface VideoUploadResult {
-  videoUrl: string;
-  thumbnailUrl?: string | null;
-  duration?: number | null;
-}
-
 export const useChatStore = create<ChatState>()(
   persist(
     (set, get) => ({
