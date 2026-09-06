@@ -276,11 +276,19 @@ export const getAllFriends = async (req, res) => {
       return res.status(200).json({ friends: [] });
     }
 
-    const friends = friendships.map((f) => {
-      const rawFriend =
-        f.userA._id.toString() === userId.toString() ? f.userB : f.userA;
-      return toFriendProfile(rawFriend);
-    });
+    // 🔧 FIX: nguyên nhân gây lỗi 500 ở API này — nếu 1 trong 2 user của
+    // cặp Friend đã bị xóa khỏi DB, populate() trả về null cho trường đó.
+    // Trước đây code truy cập thẳng f.userA._id mà không kiểm tra null,
+    // gặp user đã xóa là ném TypeError "Cannot read properties of null" ->
+    // Express bắt lỗi -> trả 500 -> frontend luôn nhận friends rỗng, khiến
+    // sidebar "BẠN BÈ" trống dù người dùng thực sự đã có bạn.
+    const friends = friendships
+      .filter((f) => f.userA && f.userB) // bỏ qua cặp bạn bè có user đã bị xóa
+      .map((f) => {
+        const rawFriend =
+          f.userA._id.toString() === userId.toString() ? f.userB : f.userA;
+        return toFriendProfile(rawFriend);
+      });
 
     return res.status(200).json({ friends });
   } catch (error) {
