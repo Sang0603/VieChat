@@ -7,7 +7,10 @@ import {
   updateConversationAfterCreateMessage,
 } from "../utils/messageHelper.js";
 import { io } from "../socket/index.js";
-import { uploadImageFromBuffer } from "../middlewares/uploadMiddleware.js";
+import {
+  uploadImageFromBuffer,
+  uploadVideoFromPath, // 👈 MỚI THÊM
+} from "../middlewares/uploadMiddleware.js";
 
 export const uploadChatImage = async (req, res) => {
   try {
@@ -29,11 +32,34 @@ export const uploadChatImage = async (req, res) => {
   }
 };
 
-// gắn thông tin replyTo (đã populate gọn) vào message trả về cho client
+// 👇 MỚI THÊM: upload video tin nhắn (chỉ upload lên Cloudinary + trả url,
+// KHÔNG tạo Message ở đây — client sẽ gọi sendDirectMessage/sendGroupMessage
+// sau, giống hệt luồng ảnh hiện tại)
+export const uploadChatVideo = async (req, res) => {
+  try {
+    const file = req.file;
+
+    if (!file) {
+      return res.status(400).json({ message: "Chưa chọn file video" });
+    }
+
+    const result = await uploadVideoFromPath(file.path);
+
+    return res.status(200).json({
+      videoUrl: result.secure_url,
+      thumbnailUrl: result.eager?.[0]?.secure_url ?? null,
+      duration: result.duration ?? null, // giây
+    });
+  } catch (error) {
+    console.error("Lỗi xảy ra khi upload video tin nhắn", error);
+    return res.status(500).json({ message: "Upload video thất bại" });
+  }
+};
+
 const attachReplyPreview = async (message) => {
   await message.populate({
     path: "replyTo",
-    select: "content imgUrl senderId",
+    select: "content imgUrl videoUrl thumbnailUrl senderId", // 👈 thêm videoUrl, thumbnailUrl
     populate: { path: "senderId", select: "displayName" },
   });
 
@@ -44,6 +70,7 @@ const attachReplyPreview = async (message) => {
       _id: plain.replyTo._id,
       content: plain.replyTo.content,
       imgUrl: plain.replyTo.imgUrl,
+      videoUrl: plain.replyTo.videoUrl, // 👈 MỚI THÊM
       senderId: plain.replyTo.senderId?._id ?? plain.replyTo.senderId,
       senderName: plain.replyTo.senderId?.displayName,
     };
@@ -54,11 +81,20 @@ const attachReplyPreview = async (message) => {
 
 export const sendDirectMessage = async (req, res) => {
   try {
-    const { recipientId, content, imgUrl, conversationId, replyTo } = req.body;
+    const {
+      recipientId,
+      content,
+      imgUrl,
+      videoUrl, // 👈 MỚI THÊM
+      thumbnailUrl, // 👈 MỚI THÊM
+      duration, // 👈 MỚI THÊM
+      conversationId,
+      replyTo,
+    } = req.body;
     const senderId = req.user._id;
 
-    if (!content && !imgUrl) {
-      return res.status(400).json({ message: "Cần có nội dung hoặc ảnh" });
+    if (!content && !imgUrl && !videoUrl) {
+      return res.status(400).json({ message: "Cần có nội dung, ảnh hoặc video" });
     }
 
     let conversation;
@@ -70,7 +106,6 @@ export const sendDirectMessage = async (req, res) => {
         return res.status(404).json({ message: "Không tìm thấy cuộc trò chuyện" });
       }
 
-      // 🔒 Chặn gửi tin nhắn vào conversation mà mình không phải thành viên
       const isMember = conversation.participants.some(
         (p) => p.userId.toString() === senderId.toString()
       );
@@ -84,7 +119,6 @@ export const sendDirectMessage = async (req, res) => {
         return res.status(400).json({ message: "Thiếu recipientId" });
       }
 
-      // tránh 2 request đồng thời tạo trùng conversation cho cùng 1 cặp user
       conversation = await Conversation.findOne({
         type: "direct",
         "participants.userId": { $all: [senderId, recipientId] },
@@ -104,9 +138,6 @@ export const sendDirectMessage = async (req, res) => {
       }
     }
 
-    // 🔒 Nếu 2 người đang chặn nhau (1 trong 2 chiều): từ chối thẳng, KHÔNG
-    // giả vờ gửi thành công nữa (kiểu Zalo: cả 2 bên đều biết bị chặn).
-    // Trả kèm blockedByMe/blockedMe để frontend hiện đúng banner.
     const otherUserId =
       conversation.participants
         .map((p) => p.userId.toString())
@@ -128,7 +159,6 @@ export const sendDirectMessage = async (req, res) => {
       }
     }
 
-    // 🔒 Nếu client gửi kèm replyTo, đảm bảo tin nhắn được reply thuộc đúng conversation này
     if (replyTo) {
       const repliedMessage = await Message.findById(replyTo).select("conversationId");
       if (
@@ -144,6 +174,9 @@ export const sendDirectMessage = async (req, res) => {
       senderId,
       content,
       imgUrl,
+      videoUrl, // 👈 MỚI THÊM
+      thumbnailUrl, // 👈 MỚI THÊM
+      duration, // 👈 MỚI THÊM
       replyTo: replyTo || undefined,
     });
 
@@ -164,12 +197,20 @@ export const sendDirectMessage = async (req, res) => {
 
 export const sendGroupMessage = async (req, res) => {
   try {
-    const { conversationId, content, imgUrl, replyTo } = req.body;
+    const {
+      conversationId,
+      content,
+      imgUrl,
+      videoUrl, // 👈 MỚI THÊM
+      thumbnailUrl, // 👈 MỚI THÊM
+      duration, // 👈 MỚI THÊM
+      replyTo,
+    } = req.body;
     const senderId = req.user._id;
-    const conversation = req.conversation; // gán bởi middleware kiểm tra membership trước route này
+    const conversation = req.conversation;
 
-    if (!content && !imgUrl) {
-      return res.status(400).json({ message: "Cần có nội dung hoặc ảnh" });
+    if (!content && !imgUrl && !videoUrl) {
+      return res.status(400).json({ message: "Cần có nội dung, ảnh hoặc video" });
     }
 
     if (replyTo) {
@@ -187,6 +228,9 @@ export const sendGroupMessage = async (req, res) => {
       senderId,
       content,
       imgUrl,
+      videoUrl, // 👈 MỚI THÊM
+      thumbnailUrl, // 👈 MỚI THÊM
+      duration, // 👈 MỚI THÊM
       replyTo: replyTo || undefined,
     });
 
@@ -204,7 +248,6 @@ export const sendGroupMessage = async (req, res) => {
   }
 };
 
-// thả / đổi / gỡ reaction cho một tin nhắn
 export const toggleReaction = async (req, res) => {
   try {
     const { messageId } = req.params;

@@ -10,6 +10,13 @@ import { useSocketStore } from "./useSocketStore";
 // với ID thật của MongoDB (không bắt đầu bằng "temp-")
 const genTempId = () => `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
+// 👇 MỚI THÊM: thông tin video sau khi upload xong lên Cloudinary
+interface VideoUploadResult {
+  videoUrl: string;
+  thumbnailUrl?: string | null;
+  duration?: number | null;
+}
+
 export const useChatStore = create<ChatState>()(
   persist(
     (set, get) => ({
@@ -104,7 +111,10 @@ export const useChatStore = create<ChatState>()(
       // (tin thật đã có sẵn trong state) thì chỉ xoá tin tạm, không tạo
       // trùng; nếu gửi thất bại thì xoá tin tạm để MessageInput khôi phục
       // lại nội dung cho người dùng gõ lại.
-      sendDirectMessage: async (recipientId, content, imgUrl, replyTo) => {
+      // 👇 MỚI THÊM: tham số `video` — chứa videoUrl/thumbnailUrl/duration
+      // ĐÃ upload xong lên Cloudinary từ trước (MessageInput gọi
+      // chatService.uploadMessageVideo() trước, rồi mới gọi action này)
+      sendDirectMessage: async (recipientId, content, imgUrl, replyTo, video) => {
         const { activeConversationId, replyingTo } = get();
         const { user } = useAuthStore.getState();
         const convoId = activeConversationId;
@@ -117,6 +127,9 @@ export const useChatStore = create<ChatState>()(
             senderId: user._id,
             content: content || null,
             imgUrl,
+            videoUrl: video?.videoUrl, // 👈 MỚI THÊM
+            thumbnailUrl: video?.thumbnailUrl, // 👈 MỚI THÊM
+            duration: video?.duration, // 👈 MỚI THÊM
             createdAt: new Date().toISOString(),
             isOwn: true,
             status: "sending",
@@ -148,7 +161,8 @@ export const useChatStore = create<ChatState>()(
             content,
             imgUrl,
             convoId || undefined,
-            replyTo
+            replyTo,
+            video // 👈 MỚI THÊM
           );
 
           if (convoId) {
@@ -208,7 +222,8 @@ export const useChatStore = create<ChatState>()(
           throw error;
         }
       },
-      sendGroupMessage: async (conversationId, content, imgUrl, replyTo) => {
+      // 👇 MỚI THÊM: tham số `video` tương tự sendDirectMessage
+      sendGroupMessage: async (conversationId, content, imgUrl, replyTo, video) => {
         const { replyingTo } = get();
         const { user } = useAuthStore.getState();
         const tempId = genTempId();
@@ -220,6 +235,9 @@ export const useChatStore = create<ChatState>()(
             senderId: user._id,
             content: content || null,
             imgUrl,
+            videoUrl: video?.videoUrl, // 👈 MỚI THÊM
+            thumbnailUrl: video?.thumbnailUrl, // 👈 MỚI THÊM
+            duration: video?.duration, // 👈 MỚI THÊM
             createdAt: new Date().toISOString(),
             isOwn: true,
             status: "sending",
@@ -250,7 +268,8 @@ export const useChatStore = create<ChatState>()(
             conversationId,
             content,
             imgUrl,
-            replyTo
+            replyTo,
+            video // 👈 MỚI THÊM
           );
 
           set((state) => {

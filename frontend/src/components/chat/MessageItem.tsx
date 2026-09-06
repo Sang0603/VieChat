@@ -186,6 +186,7 @@ const MessageItem = ({
       _id: message._id,
       content: message.content,
       imgUrl: message.imgUrl,
+      videoUrl: message.videoUrl, // 👈 MỚI THÊM
       senderId: message.senderId,
       senderName: participant?.displayName,
     });
@@ -368,7 +369,9 @@ const MessageItem = ({
                 {message.replyTo.senderName ?? "Tin nhắn"}
               </p>
               <p className="text-xs text-muted-foreground truncate max-w-[220px]">
-                {message.replyTo.imgUrl && !message.replyTo.content
+                {message.replyTo.videoUrl && !message.replyTo.content
+                  ? "Đã gửi một video"
+                  : message.replyTo.imgUrl && !message.replyTo.content
                   ? "Đã gửi một ảnh"
                   : message.replyTo.content}
               </p>
@@ -388,6 +391,32 @@ const MessageItem = ({
                 className="rounded-md max-w-full max-h-80 object-cover cursor-pointer"
                 onClick={() => window.open(message.imgUrl ?? undefined, "_blank")}
               />
+              {message.content && (
+                <p className="text-sm leading-relaxed break-words px-2 pt-2 pb-1">
+                  {message.content}
+                </p>
+              )}
+            </Card>
+          ) : message.videoUrl ? (
+            // 👇 MỚI THÊM: render tin nhắn video. preload="metadata" chỉ tải
+            // thông tin thời lượng/kích thước, KHÔNG tải cả file ngay ->
+            // Cloudinary hỗ trợ streaming qua HTTP range request sẵn nên
+            // tua/phát mượt kể cả video dài.
+            <Card
+              className={cn(
+                "p-1 overflow-hidden",
+                message.isOwn ? "chat-bubble-sent border-0" : "chat-bubble-received"
+              )}
+            >
+              <video
+                controls
+                poster={message.thumbnailUrl ?? undefined}
+                preload="metadata"
+                className="rounded-md max-w-full max-h-80"
+              >
+                <source src={message.videoUrl} />
+                Trình duyệt của bạn không hỗ trợ phát video.
+              </video>
               {message.content && (
                 <p className="text-sm leading-relaxed break-words px-2 pt-2 pb-1">
                   {message.content}

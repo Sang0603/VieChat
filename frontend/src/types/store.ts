@@ -37,6 +37,14 @@ export interface TypingUser {
   displayName?: string;
 }
 
+// 👇 MỚI THÊM: thông tin video sau khi đã upload xong lên Cloudinary
+// (dùng làm tham số bổ sung cho sendDirectMessage/sendGroupMessage)
+export interface VideoUploadResult {
+  videoUrl: string;
+  thumbnailUrl?: string | null;
+  duration?: number | null;
+}
+
 export interface ChatState {
   conversations: Conversation[];
   messages: Record<string, { items: Message[]; hasMore: boolean; nextCursor?: string | null }>;
@@ -57,17 +65,21 @@ export interface ChatState {
   fetchMessages: (conversationId?: string) => Promise<void>;
   // 👇 SỬA: giờ trả về message vừa gửi (backend không còn "giả vờ thành công"
   // khi bị chặn - lỗi 403 blocked sẽ ném ra ngoài để nơi gọi tự bắt)
+  // 👇 MỚI THÊM: tham số `video` optional — chứa videoUrl/thumbnailUrl/duration
+  // đã upload xong lên Cloudinary từ trước khi gọi hàm này
   sendDirectMessage: (
     recipientId: string,
     content: string,
     imgUrl?: string,
-    replyTo?: string
+    replyTo?: string,
+    video?: VideoUploadResult
   ) => Promise<Message>;
   sendGroupMessage: (
     conversationId: string,
     content: string,
     imgUrl?: string,
-    replyTo?: string
+    replyTo?: string,
+    video?: VideoUploadResult
   ) => Promise<void>;
   // add message
   addMessage: (message: Message) => Promise<void>;

@@ -20,6 +20,16 @@ const messageSchema = new mongoose.Schema(
     imgUrl: {
       type: String,
     },
+    // 👇 MỚI THÊM: 3 field cho tin nhắn video
+    videoUrl: {
+      type: String,
+    },
+    thumbnailUrl: {
+      type: String,
+    },
+    duration: {
+      type: Number, // giây, chỉ có giá trị khi có videoUrl
+    },
     // "text" (mặc định, tin nhắn thường) | "call" (log cuộc gọi)
     type: {
       type: String,
@@ -34,18 +44,15 @@ const messageSchema = new mongoose.Schema(
         type: String,
         enum: ["completed", "missed", "rejected", "cancelled"],
       },
-      // luôn là người bấm gọi (trùng với senderId của message này)
       callerId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
       calleeId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
       durationInSeconds: { type: Number, default: 0 },
     },
-    // tin nhắn đang được trả lời (nếu có)
     replyTo: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Message",
       default: null,
     },
-    // 👇 MỚI THÊM: danh sách reaction (mỗi user chỉ được 1 reaction/tin nhắn)
     reactions: {
       type: [
         {

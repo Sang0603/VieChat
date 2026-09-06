@@ -58,6 +58,7 @@ export interface ReplyPreview {
   _id: string;
   content: string | null;
   imgUrl?: string | null;
+  videoUrl?: string | null
   senderId: string;
   senderName?: string;
 }
@@ -74,6 +75,9 @@ export interface Message {
   senderId: string;
   content: string | null;
   imgUrl?: string | null;
+  videoUrl?: string | null;
+  thumbnailUrl?: string | null;
+  duration?: number | null;
   updatedAt?: string | null;
   createdAt: string;
   isOwn?: boolean;

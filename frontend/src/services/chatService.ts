@@ -6,6 +6,13 @@ interface FetchMessageProps {
   cursor?: string;
 }
 
+// 👇 MỚI THÊM: thông tin video sau khi upload xong lên Cloudinary
+interface VideoUploadResult {
+  videoUrl: string;
+  thumbnailUrl?: string | null;
+  duration?: number | null;
+}
+
 const pageLimit = 50;
 
 export const chatService = {
@@ -33,12 +40,37 @@ export const chatService = {
     return res.data.imgUrl;
   },
 
+  // 👇 MỚI THÊM: upload video, có callback theo dõi % tiến độ (vì video
+  // dài sẽ mất thời gian, cần hiện progress cho người dùng)
+  async uploadMessageVideo(
+    file: File,
+    onProgress?: (percent: number) => void
+  ): Promise<VideoUploadResult> {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const res = await api.post("/messages/upload-video", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+      onUploadProgress: (event) => {
+        if (!onProgress || !event.total) return;
+        onProgress(Math.round((event.loaded * 100) / event.total));
+      },
+    });
+
+    return {
+      videoUrl: res.data.videoUrl,
+      thumbnailUrl: res.data.thumbnailUrl,
+      duration: res.data.duration,
+    };
+  },
+
   async sendDirectMessage(
     recipientId: string,
     content: string = "",
     imgUrl?: string,
     conversationId?: string,
-    replyTo?: string
+    replyTo?: string,
+    video?: VideoUploadResult // 👈 MỚI THÊM, để cuối cùng cho dễ tương thích ngược
   ) {
     const res = await api.post("/messages/direct", {
       recipientId,
@@ -46,6 +78,9 @@ export const chatService = {
       imgUrl,
       conversationId,
       replyTo,
+      videoUrl: video?.videoUrl,
+      thumbnailUrl: video?.thumbnailUrl,
+      duration: video?.duration,
     });
 
     return res.data.message;
@@ -55,13 +90,17 @@ export const chatService = {
     conversationId: string,
     content: string = "",
     imgUrl?: string,
-    replyTo?: string
+    replyTo?: string,
+    video?: VideoUploadResult // 👈 MỚI THÊM
   ) {
     const res = await api.post("/messages/group", {
       conversationId,
       content,
       imgUrl,
       replyTo,
+      videoUrl: video?.videoUrl,
+      thumbnailUrl: video?.thumbnailUrl,
+      duration: video?.duration,
     });
     return res.data.message;
   },
@@ -80,13 +119,11 @@ export const chatService = {
     return res.data.conversation;
   },
 
-  //  thả / đổi / gỡ reaction cho 1 tin nhắn
   async toggleReaction(messageId: string, emoji: string): Promise<MessageReaction[]> {
     const res = await api.patch(`/messages/${messageId}/reaction`, { emoji });
     return res.data.reactions;
   },
 
-  // 🆕 MỚI THÊM: xóa (ẩn) đoạn chat phía mình — không xóa dữ liệu thật
   async hideConversation(conversationId: string) {
     const res = await api.delete(`/conversations/${conversationId}`);
     return res.data;
