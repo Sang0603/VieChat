@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Shield, Bell, ShieldBan, Phone, Cake, UserX } from "lucide-react";
+import { Shield, Phone, Cake, UserX } from "lucide-react";
 import {
   Card,
   CardHeader,
@@ -7,11 +7,9 @@ import {
   CardDescription,
   CardContent,
 } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import ChangePasswordDialog from "./ChangePasswordDialog";
-import BlockedUsersDialog from "./BlockedUsersDialog";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useUserStore } from "@/stores/useUserStore";
 
@@ -27,7 +25,6 @@ const PrivacySettings = () => {
   const [blockStrangerMessages, setBlockStrangerMessages] = useState(
     user?.privacy?.blockStrangerMessages ?? false
   );
-  const [blockedDialogOpen, setBlockedDialogOpen] = useState(false);
 
   const handleTogglePhone = async (checked: boolean) => {
     setShowPhone(checked);
@@ -99,34 +96,8 @@ const PrivacySettings = () => {
 
         <div className="space-y-4">
           <ChangePasswordDialog />
-
-          <Button
-            variant="outline"
-            className="w-full justify-start glass-light border-border/30 hover:text-info"
-          >
-            <Bell className="h-4 w-4 mr-2" />
-            Cài đặt thông báo
-          </Button>
-
-          <Button
-            variant="outline"
-            className="w-full justify-start glass-light border-border/30 hover:text-destructive"
-            onClick={() => setBlockedDialogOpen(true)}
-          >
-            <ShieldBan className="size-4 mr-2" />
-            Người dùng đã chặn
-          </Button>
-        </div>
-
-        <div className="pt-4 border-t border-border/30">
-          <h4 className="font-medium mb-3 text-destructive">Khu vực nguy hiểm</h4>
-          <Button variant="destructive" className="w-full">
-            Xoá tài khoản
-          </Button>
         </div>
       </CardContent>
-
-      <BlockedUsersDialog open={blockedDialogOpen} onOpenChange={setBlockedDialogOpen} />
     </Card>
   );
 };
