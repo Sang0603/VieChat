@@ -4,11 +4,14 @@ import User from "../models/User.js";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import Session from "../models/Session.js";
+import { OAuth2Client } from "google-auth-library";
 
 const ACCESS_TOKEN_TTL = "30m"; // thuờng là dưới 15m
 const REFRESH_TOKEN_TTL = 14 * 24 * 60 * 60 * 1000; // 14 ngày
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 export const signUp = async (req, res) => {
   try {
@@ -68,6 +71,7 @@ export const signUp = async (req, res) => {
       hashedPassword,
       email,
       displayName: `${lastName} ${firstName}`,
+      authProvider: "local",
     });
 
     // return
@@ -98,6 +102,14 @@ export const signIn = async (req, res) => {
       return res
         .status(401)
         .json({ message: "username hoặc password không chính xác" });
+    }
+
+    // tài khoản tạo bằng Google có thể chưa có password
+    if (!user.hashedPassword) {
+      return res.status(401).json({
+        message:
+          "Tài khoản này được đăng nhập bằng Google. Vui lòng dùng đúng phương thức đó.",
+      });
     }
 
     // kiểm tra password
@@ -199,6 +211,108 @@ export const refreshToken = async (req, res) => {
     return res.status(200).json({ accessToken });
   } catch (error) {
     console.error("Lỗi khi gọi refreshToken", error);
+    return res.status(500).json({ message: "Lỗi hệ thống" });
+  }
+};
+
+// ================== GOOGLE LOGIN ==================
+
+// tạo username không trùng từ phần trước @ của email
+const generateUniqueUsername = async (base) => {
+  const cleanBase =
+    base
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "")
+      .slice(0, 20) || "user";
+
+  let candidate = cleanBase;
+  let suffix = 0;
+
+  // eslint-disable-next-line no-await-in-loop
+  while (await User.findOne({ username: candidate })) {
+    suffix += 1;
+    candidate = `${cleanBase}${suffix}`;
+  }
+
+  return candidate;
+};
+
+export const googleSignIn = async (req, res) => {
+  try {
+    const { credential } = req.body;
+
+    if (!credential || typeof credential !== "string") {
+      return res.status(400).json({ message: "Thiếu Google credential" });
+    }
+
+    let payload;
+    try {
+      const ticket = await googleClient.verifyIdToken({
+        idToken: credential,
+        audience: process.env.GOOGLE_CLIENT_ID,
+      });
+      payload = ticket.getPayload();
+    } catch (error) {
+      console.error("Google token không hợp lệ", error);
+      return res.status(401).json({ message: "Google token không hợp lệ" });
+    }
+
+    if (!payload?.email) {
+      return res.status(401).json({ message: "Không lấy được email từ Google" });
+    }
+
+    const email = payload.email.toLowerCase().trim();
+
+    let user = await User.findOne({ $or: [{ googleId: payload.sub }, { email }] });
+
+    if (!user) {
+      const username = await generateUniqueUsername(email.split("@")[0]);
+      user = await User.create({
+        username,
+        email,
+        googleId: payload.sub,
+        displayName:
+          payload.name ||
+          `${payload.given_name ?? ""} ${payload.family_name ?? ""}`.trim() ||
+          username,
+        avatarUrl: payload.picture,
+        authProvider: "google",
+      });
+    } else if (!user.googleId) {
+      // user đã tồn tại (đăng ký bằng username/password trước đó) -> gắn thêm googleId
+      user.googleId = payload.sub;
+      if (!user.avatarUrl) user.avatarUrl = payload.picture;
+      await user.save();
+    }
+
+    // tạo accessToken + refreshToken (session) giống signIn thường
+    const accessToken = jwt.sign(
+      { userId: user._id },
+      process.env.ACCESS_TOKEN_SECRET,
+      { expiresIn: ACCESS_TOKEN_TTL }
+    );
+
+    const refreshToken = crypto.randomBytes(64).toString("hex");
+
+    await Session.create({
+      userId: user._id,
+      refreshToken,
+      expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL),
+    });
+
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "none",
+      maxAge: REFRESH_TOKEN_TTL,
+    });
+
+    return res.status(200).json({
+      message: `User ${user.displayName} đã logged in!`,
+      accessToken,
+    });
+  } catch (error) {
+    console.error("Lỗi khi gọi googleSignIn", error);
     return res.status(500).json({ message: "Lỗi hệ thống" });
   }
 };

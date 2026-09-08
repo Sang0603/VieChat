@@ -4,6 +4,7 @@ import {
   signIn,
   signOut,
   signUp,
+  googleSignIn,
 } from "../controllers/authController.js";
 import {
   authLimiter,
@@ -20,5 +21,8 @@ router.post("/signin", signInLimiter, signIn);
 router.post("/signout", signOut);
 
 router.post("/refresh", refreshLimiter, refreshToken);
+
+// 👇 MỚI THÊM: đăng nhập/đăng ký bằng Google
+router.post("/google", signInLimiter, googleSignIn);
 
 export default router;

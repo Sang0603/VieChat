@@ -10,6 +10,7 @@ import { Label } from "../ui/label";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useNavigate } from "react-router";
 import { Eye, EyeOff } from "lucide-react";
+import { SocialAuthButtons } from "./SocialAuthButtons";
 
 const signInSchema = z.object({
   username: z.string().min(3, "Tên đăng nhập phải có ít nhất 3 ký tự"),
@@ -59,10 +60,7 @@ export function SigninForm({ className, ...props }: React.ComponentProps<"div">)
             <div className="flex flex-col gap-7 w-full">
               {/* header - logo */}
               <div className="flex flex-col items-center text-center gap-3">
-                <a
-                  href="/"
-                  className="mx-auto block w-fit text-center"
-                >
+                <a href="/" className="mx-auto block w-fit text-center">
                   <img
                     src="/logo.svg"
                     alt="VieChat logo"
@@ -143,13 +141,13 @@ export function SigninForm({ className, ...props }: React.ComponentProps<"div">)
 
               <div className="text-center text-sm">
                 Chưa có tài khoản?{" "}
-                <a
-                  href="/signup"
-                  className="underline underline-offset-4"
-                >
+                <a href="/signup" className="underline underline-offset-4">
                   Đăng ký
                 </a>
               </div>
+
+              {/* 👇 MỚI THÊM: đăng nhập bằng Google */}
+              <SocialAuthButtons />
             </div>
           </form>
         </CardContent>

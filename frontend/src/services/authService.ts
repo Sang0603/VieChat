@@ -26,6 +26,16 @@ export const authService = {
     return res.data; // access token
   },
 
+  // 👇 MỚI THÊM
+  googleSignIn: async (credential: string) => {
+    const res = await api.post(
+      "/auth/google",
+      { credential },
+      { withCredentials: true }
+    );
+    return res.data;
+  },
+
   signOut: async () => {
     return api.post("/auth/signout", { withCredentials: true });
   },

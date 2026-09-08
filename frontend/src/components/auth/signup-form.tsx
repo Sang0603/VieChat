@@ -10,6 +10,7 @@ import { Label } from "../ui/label";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useNavigate } from "react-router";
 import { Eye, EyeOff } from "lucide-react";
+import { SocialAuthButtons } from "./SocialAuthButtons";
 
 const passwordSchema = z
   .string()
@@ -67,10 +68,7 @@ export function SignupForm({ className, ...props }: React.ComponentProps<"div">)
             <div className="flex flex-col gap-4 w-full">
               {/* header - logo */}
               <div className="flex flex-col items-center text-center gap-2">
-                <a
-                  href="/"
-                  className="mx-auto block w-fit text-center"
-                >
+                <a href="/" className="mx-auto block w-fit text-center">
                   <img
                     src="/logo.svg"
                     alt="VieChat logo"
@@ -203,13 +201,13 @@ export function SignupForm({ className, ...props }: React.ComponentProps<"div">)
 
               <div className="text-center text-sm">
                 Đã có tài khoản?{" "}
-                <a
-                  href="/signin"
-                  className="underline underline-offset-4"
-                >
+                <a href="/signin" className="underline underline-offset-4">
                   Đăng nhập
                 </a>
               </div>
+
+              {/* 👇 MỚI THÊM: đăng ký bằng Google */}
+              <SocialAuthButtons />
             </div>
           </form>
         </CardContent>

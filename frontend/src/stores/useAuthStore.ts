@@ -59,7 +59,32 @@ export const useAuthStore = create<AuthState>()(
           return true;
         } catch (error) {
           console.error(error);
-          // lấy message thật từ server: 401 sai username/password, 429 rate limit,...
+          const message =
+            (error as { response?: { data?: { message?: string } } })?.response?.data
+              ?.message ?? "Đăng nhập không thành công!";
+          toast.error(message);
+          return false;
+        } finally {
+          set({ loading: false });
+        }
+      },
+      // 👇 MỚI THÊM: đăng nhập/đăng ký bằng Google
+      googleSignIn: async (credential) => {
+        try {
+          get().clearState();
+          set({ loading: true });
+
+          const { accessToken } = await authService.googleSignIn(credential);
+          get().setAccessToken(accessToken);
+
+          await get().fetchMe();
+          useChatStore.getState().fetchConversations();
+          useSocketStore.getState().connectSocket();
+
+          toast.success("Chào mừng bạn đến với VieChat 🎉");
+          return true;
+        } catch (error) {
+          console.error(error);
           const message =
             (error as { response?: { data?: { message?: string } } })?.response?.data
               ?.message ?? "Đăng nhập không thành công!";
