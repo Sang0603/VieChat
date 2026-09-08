@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Friend } from "@/types/user";
 import ChatCard from "./ChatCard";
 import { useChatStore } from "@/stores/useChatStore";
@@ -7,6 +7,7 @@ import { useFriendStore } from "@/stores/useFriendStore";
 import UserAvatar from "./UserAvatar";
 import StatusBadge from "./StatusBadge";
 import FriendProfileDialog from "./FriendProfileDialog";
+import { useStartCall } from "@/hooks/useStartCall";
 
 // 🆕 MỚI THÊM: card cho 1 người bạn CHƯA có conversation nào với mình.
 // Bấm vào sẽ tự tạo conversation (backend tự dedupe nếu đã tồn tại), sau đó
@@ -17,11 +18,52 @@ const FriendWithoutConvoCard = ({ friend }: { friend: Friend }) => {
   const [profileOpen, setProfileOpen] = useState(false);
   const [creating, setCreating] = useState(false);
 
+  // 👇 MỚI THÊM: gọi điện khi CHƯA có conversation -> phải tạo conversation
+  // trước, rồi mới startCall với id vừa tạo. useStartCall cần conversationId
+  // cố định ngay lúc gọi hook, nên dùng state + useEffect để "chờ" đủ dữ
+  // liệu rồi mới thực sự bắn cuộc gọi.
+  const [callConvId, setCallConvId] = useState<string | null>(null);
+  const [pendingCallType, setPendingCallType] = useState<"audio" | "video" | null>(
+    null
+  );
+  const { startCall } = useStartCall(callConvId ?? "");
+
+  useEffect(() => {
+    if (!pendingCallType || !callConvId) return;
+
+    startCall(
+      {
+        _id: friend._id,
+        displayName: friend.displayName ?? "",
+        avatarUrl: friend.avatarUrl,
+      },
+      pendingCallType
+    );
+    setPendingCallType(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingCallType, callConvId]);
+
   const handleSelect = async () => {
     if (creating) return;
     setCreating(true);
     try {
       await createConversation("direct", "", [friend._id]);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  // 👇 MỚI THÊM: tạo conversation (nếu chưa có) rồi mới gọi
+  const handleCall = async (type: "audio" | "video" = "audio") => {
+    if (creating) return;
+    setCreating(true);
+    try {
+      await createConversation("direct", "", [friend._id]);
+      const newConvId = useChatStore.getState().activeConversationId;
+      if (newConvId) {
+        setCallConvId(newConvId);
+        setPendingCallType(type);
+      }
     } finally {
       setCreating(false);
     }
@@ -72,6 +114,10 @@ const FriendWithoutConvoCard = ({ friend }: { friend: Friend }) => {
         open={profileOpen}
         onOpenChange={setProfileOpen}
         friendId={friend._id}
+        onCall={() => {
+          handleCall("audio");
+          setProfileOpen(false);
+        }}
         onMessage={() => {
           handleSelect();
           setProfileOpen(false);

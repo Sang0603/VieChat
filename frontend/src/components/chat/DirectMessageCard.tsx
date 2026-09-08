@@ -10,6 +10,7 @@ import UnreadCountBadge from "./UnreadCountBadge";
 import { useSocketStore } from "@/stores/useSocketStore";
 import { useFriendStore } from "@/stores/useFriendStore";
 import FriendProfileDialog from "./FriendProfileDialog";
+import { useStartCall } from "@/hooks/useStartCall"; // 👈 MỚI THÊM
 
 const DirectMessageCard = ({ convo }: { convo: Conversation }) => {
   const { user } = useAuthStore();
@@ -25,6 +26,10 @@ const DirectMessageCard = ({ convo }: { convo: Conversation }) => {
   // dialog xem thông tin bạn bè khi bấm vào avatar — tách riêng khỏi việc
   // chọn hội thoại (onSelect của ChatCard) nên phải stopPropagation.
   const [profileOpen, setProfileOpen] = useState(false);
+
+  // 👇 MỚI THÊM: đã có sẵn conversationId (convo._id) nên gọi thẳng, không
+  // cần tạo conversation như trường hợp FriendWithoutConvoCard
+  const { startCall } = useStartCall(convo._id);
 
   if (!user) return null;
 
@@ -53,6 +58,18 @@ const DirectMessageCard = ({ convo }: { convo: Conversation }) => {
     hideConversation(id).catch(() => {
       // lỗi đã log trong store, ở đây chỉ chặn không cho crash UI
     });
+  };
+
+  // 👇 MỚI THÊM: bấm "Gọi điện" trong FriendProfileDialog
+  const handleCall = () => {
+    startCall(
+      {
+        _id: otherUser._id,
+        displayName: otherUser.displayName ?? "",
+        avatarUrl: otherUser.avatarUrl,
+      },
+      "audio"
+    );
   };
 
   return (
@@ -107,6 +124,7 @@ const DirectMessageCard = ({ convo }: { convo: Conversation }) => {
         open={profileOpen}
         onOpenChange={setProfileOpen}
         friendId={otherUser._id}
+        onCall={handleCall} // 👈 MỚI THÊM
         onMessage={() => {
           handleSelectConversation(convo._id);
           setProfileOpen(false);
