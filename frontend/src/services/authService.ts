@@ -27,10 +27,13 @@ export const authService = {
   },
 
   // 👇 MỚI THÊM
-  googleSignIn: async (credential: string) => {
+  // 🔧 FIX: đổi tên tham số từ `credential` (ID token, dùng với nút
+  // <GoogleLogin> cũ) sang `googleAccessToken` (access_token, dùng với
+  // hook useGoogleLogin flow "implicit" mới trong SocialAuthButtons.tsx)
+  googleSignIn: async (googleAccessToken: string) => {
     const res = await api.post(
       "/auth/google",
-      { credential },
+      { googleAccessToken },
       { withCredentials: true }
     );
     return res.data;

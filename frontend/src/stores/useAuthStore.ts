@@ -69,12 +69,14 @@ export const useAuthStore = create<AuthState>()(
         }
       },
       // 👇 MỚI THÊM: đăng nhập/đăng ký bằng Google
-      googleSignIn: async (credential) => {
+      // 🔧 FIX: đổi tên tham số credential -> googleAccessToken cho khớp
+      // với flow "implicit" mới (xem SocialAuthButtons.tsx + authService.ts)
+      googleSignIn: async (googleAccessToken) => {
         try {
           get().clearState();
           set({ loading: true });
 
-          const { accessToken } = await authService.googleSignIn(credential);
+          const { accessToken } = await authService.googleSignIn(googleAccessToken);
           get().setAccessToken(accessToken);
 
           await get().fetchMe();

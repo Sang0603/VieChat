@@ -4,14 +4,11 @@ import User from "../models/User.js";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import Session from "../models/Session.js";
-import { OAuth2Client } from "google-auth-library";
 
 const ACCESS_TOKEN_TTL = "30m"; // thuờng là dưới 15m
 const REFRESH_TOKEN_TTL = 14 * 24 * 60 * 60 * 1000; // 14 ngày
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 export const signUp = async (req, res) => {
   try {
@@ -237,24 +234,40 @@ const generateUniqueUsername = async (base) => {
   return candidate;
 };
 
+// 🔧 FIX: trước đây nhận `credential` (ID token JWT) từ nút <GoogleLogin>
+// (nút iframe do Google vẽ) và xác thực bằng googleClient.verifyIdToken()
+// (thư viện google-auth-library). Nút đó tự đổi text/avatar thành "Tiếp
+// tục bằng tên ..." khi trình duyệt có sẵn phiên Google -> không kiểm
+// soát được (xem SocialAuthButtons.tsx).
+//
+// Giờ frontend dùng nút tự vẽ 100% + hook useGoogleLogin flow "implicit",
+// nên chỉ nhận được access_token, không có ID token nữa. Xác thực bằng
+// cách gọi thẳng Google userinfo endpoint bằng access_token, lấy về các
+// field cần: sub, email, name, given_name, family_name, picture.
+// -> Không còn cần OAuth2Client/google-auth-library trong file này nữa.
 export const googleSignIn = async (req, res) => {
   try {
-    const { credential } = req.body;
+    const { googleAccessToken } = req.body;
 
-    if (!credential || typeof credential !== "string") {
-      return res.status(400).json({ message: "Thiếu Google credential" });
+    if (!googleAccessToken || typeof googleAccessToken !== "string") {
+      return res.status(400).json({ message: "Thiếu Google access token" });
     }
 
     let payload;
     try {
-      const ticket = await googleClient.verifyIdToken({
-        idToken: credential,
-        audience: process.env.GOOGLE_CLIENT_ID,
-      });
-      payload = ticket.getPayload();
+      const userinfoRes = await fetch(
+        "https://www.googleapis.com/oauth2/v3/userinfo",
+        { headers: { Authorization: `Bearer ${googleAccessToken}` } }
+      );
+
+      if (!userinfoRes.ok) {
+        throw new Error(`Google userinfo trả về status ${userinfoRes.status}`);
+      }
+
+      payload = await userinfoRes.json();
     } catch (error) {
-      console.error("Google token không hợp lệ", error);
-      return res.status(401).json({ message: "Google token không hợp lệ" });
+      console.error("Google access token không hợp lệ", error);
+      return res.status(401).json({ message: "Google access token không hợp lệ" });
     }
 
     if (!payload?.email) {
