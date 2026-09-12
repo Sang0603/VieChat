@@ -61,7 +61,12 @@ const DirectMessageCard = ({ convo }: { convo: Conversation }) => {
   };
 
   // 👇 MỚI THÊM: bấm "Gọi điện" trong FriendProfileDialog
+  // 🔧 FIX: thiếu đóng dialog thông tin tài khoản trước khi bắt đầu gọi,
+  // khiến dialog che mất CallWindow (giao diện gọi) phía sau -> người
+  // dùng chỉ thấy dialog đứng yên, tưởng bấm "Gọi điện" không có tác dụng
+  // dù cuộc gọi thực ra đã bắt đầu chạy ngầm phía sau.
   const handleCall = () => {
+    setProfileOpen(false);
     startCall(
       {
         _id: otherUser._id,

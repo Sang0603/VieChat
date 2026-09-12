@@ -15,9 +15,11 @@ import FriendProfileDialog from "./FriendProfileDialog";
 import { ShieldBan, UserPlus, Loader2 } from "lucide-react";
 import { Button } from "../ui/button";
 import { toast } from "sonner";
+import { useStartCall } from "@/hooks/useStartCall"; // 👈 MỚI THÊM
 
 const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
-  const { conversations, activeConversationId, typingUsers } = useChatStore();
+  const { conversations, activeConversationId, typingUsers, setActiveConversation } =
+    useChatStore();
   const { user } = useAuthStore();
   const { onlineUsers } = useSocketStore();
   const blockedFriendIds = useFriendStore((s) => s.blockedFriendIds);
@@ -31,6 +33,10 @@ const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
   let otherUser: Conversation["participants"][number] | null | undefined;
 
   chat = chat ?? conversations.find((c) => c._id === activeConversationId);
+
+  // 👇 MỚI THÊM: phải gọi hook TRƯỚC bất kỳ early return nào (rules of
+  // hooks) - dùng chat?._id vì lúc này chat có thể vẫn chưa xác định.
+  const { startCall } = useStartCall(chat?._id ?? "");
 
   if (!chat) {
     return (
@@ -87,6 +93,32 @@ const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
     } finally {
       setUnblocking(false);
     }
+  };
+
+  // 👇 MỚI THÊM: bấm "Gọi điện" trong FriendProfileDialog (mở từ header).
+  // Trước đây thiếu hẳn onCall/onMessage khi truyền vào FriendProfileDialog
+  // ở dưới, nên 2 nút bấm không có tác dụng gì (không lỗi, chỉ là no-op vì
+  // onCall?.(...) optional).
+  const handleCall = () => {
+    if (!otherUser) return;
+    setProfileOpen(false);
+    startCall(
+      {
+        _id: otherUser._id,
+        displayName: otherUser.displayName ?? "",
+        avatarUrl: otherUser.avatarUrl,
+      },
+      "audio"
+    );
+  };
+
+  // 👇 MỚI THÊM: bấm "Nhắn tin" - đang xem đúng đoạn chat này rồi nên chỉ
+  // cần đóng dialog lại, đồng thời đảm bảo đúng conversation đang active
+  // (phòng trường hợp `chat` truyền vào khác với activeConversationId).
+  const handleMessage = () => {
+    if (!chat) return;
+    setActiveConversation(chat._id);
+    setProfileOpen(false);
   };
 
   const currentTypers = (typingUsers[chat._id] ?? []).filter(
@@ -228,6 +260,8 @@ const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
           open={profileOpen}
           onOpenChange={setProfileOpen}
           friendId={otherUser._id}
+          onCall={handleCall} // 👈 MỚI THÊM
+          onMessage={handleMessage} // 👈 MỚI THÊM
           onBlock={(friendId) => useFriendStore.getState().blockFriend(friendId)}
           onUnfriend={(friendId) => useFriendStore.getState().unfriend(friendId)}
         />
