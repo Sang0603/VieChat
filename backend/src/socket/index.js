@@ -20,20 +20,15 @@ io.use(socketAuthMiddleware);
 
 const onlineUsers = new Map(); // {userId: socketId}
 
-// 👇 MỚI THÊM: theo dõi riêng những userId đang online là admin, để loại ra
-// khỏi số đếm "người dùng online" trên dashboard (admin không phải end-user
-// thật). Vẫn giữ nguyên onlineUsers Map như cũ (userId -> socketId) để không
-// ảnh hưởng chỗ khác đang dùng nó (registerCallHandlers, broadcast list...).
 const adminUserIds = new Set();
 
 io.on("connection", async (socket) => {
   const user = socket.user;
+  const userId = user._id.toString();
 
-  onlineUsers.set(user._id.toString(), socket.id);
+  onlineUsers.set(userId, socket.id);
   if (user.role === "admin") {
-    adminUserIds.add(user._id.toString());
-    // 👇 MỚI THÊM: admin join room riêng để nhận realtime số online,
-    // không cần dashboard phải polling.
+    adminUserIds.add(userId);
     socket.join("admins");
   }
 
@@ -49,7 +44,7 @@ io.on("connection", async (socket) => {
     socket.join(conversationId);
   });
 
-  socket.join(user._id.toString());
+  socket.join(userId);
 
   registerCallHandlers(io, socket, onlineUsers);
 
@@ -59,7 +54,7 @@ io.on("connection", async (socket) => {
 
     socket.to(conversationId).emit("typing:start", {
       conversationId,
-      userId: user._id.toString(),
+      userId,
       displayName: user.displayName,
     });
   });
@@ -69,33 +64,36 @@ io.on("connection", async (socket) => {
 
     socket.to(conversationId).emit("typing:stop", {
       conversationId,
-      userId: user._id.toString(),
+      userId,
     });
   });
   // ==================== HẾT PHẦN TYPING INDICATOR ====================
 
   socket.on("disconnect", () => {
-    onlineUsers.delete(user._id.toString());
-    adminUserIds.delete(user._id.toString());
-    io.emit("online-users", Array.from(onlineUsers.keys()));
-    broadcastOnlineCount();
+    // 🔧 FIX: chỉ xoá entry nếu nó vẫn đang trỏ đúng socket này. Trong dev
+    // mode (React StrictMode), effect kết nối socket ở frontend chạy theo
+    // kiểu mount -> cleanup -> mount lại ngay khi load trang, tạo ra 1 socket
+    // cũ bị disconnect ngay sau khi 1 socket mới của CÙNG user đã kết nối và
+    // ghi đè map. Sự kiện "disconnect" của socket cũ đến sau, nếu xoá vô
+    // điều kiện theo userId sẽ xoá NHẦM luôn entry của socket mới đang sống,
+    // khiến các sự kiện call:accepted/call:offer... gửi sai đích hoặc bị mất.
+    if (onlineUsers.get(userId) === socket.id) {
+      onlineUsers.delete(userId);
+      adminUserIds.delete(userId);
+      io.emit("online-users", Array.from(onlineUsers.keys()));
+      broadcastOnlineCount();
+    }
   });
 });
 
-// 👇 MỚI THÊM: helper cho adminController lấy số user đang online
-// (dùng chung onlineUsers Map đang track ở trên, không cần DB field riêng)
-// Loại admin ra khỏi số đếm — xem giải thích ở adminUserIds phía trên.
 export function getOnlineUserCount() {
   let count = 0;
-  for (const userId of onlineUsers.keys()) {
-    if (!adminUserIds.has(userId)) count++;
+  for (const id of onlineUsers.keys()) {
+    if (!adminUserIds.has(id)) count++;
   }
   return count;
 }
 
-// 👇 MỚI THÊM: đẩy realtime số online cho các admin đang mở dashboard, thay
-// vì bắt frontend phải polling. Chỉ emit tới room "admins" (không broadcast
-// toàn bộ) để tránh lộ số liệu quản trị cho user thường.
 function broadcastOnlineCount() {
   io.to("admins").emit("online-count", getOnlineUserCount());
 }

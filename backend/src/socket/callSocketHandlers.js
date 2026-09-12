@@ -122,20 +122,38 @@ export function registerCallHandlers(io, socket, userSocketMap) {
   socket.on("call:invite", async ({ toUserId, conversationId, callType = "audio", fromUser }) => {
     // 🔒 Nếu 2 người đang chặn nhau: báo y hệt trường hợp "người nhận
     // không online" -> người gọi không biết mình đang bị chặn.
+    // Trường hợp này KHÔNG lưu lại log/tin nhắn cuộc gọi nhỡ, vì 2 bên
+    // đã chặn nhau thì không nên để lại dấu vết cuộc gọi trong đoạn chat.
     if (await isBlockedBetween(currentUserId, toUserId)) {
       socket.emit("call:unavailable", { toUserId });
       return;
     }
 
     const targetSocketId = userSocketMap.get(toUserId);
+    const callId = makeCallId(currentUserId, toUserId);
 
     if (!targetSocketId) {
-      // Người nhận không online -> báo ngay cho người gọi, không cần đổ chuông
+      // 🔧 FIX: Người nhận offline -> trước đây chỉ báo "call:unavailable"
+      // rồi return ngay, không hề tạo CallLog/Message, nên người gọi
+      // không thấy "cuộc gọi nhỡ" nào trong khung chat. Giờ vẫn cho phép
+      // gọi (không chặn ở phía client), và khi biết chắc người nhận không
+      // online thì lưu ngay thành 1 cuộc gọi "missed" để hiện trong chat,
+      // giống hệt UX của các app chat khác khi gọi cho người đang offline.
+      const offlineCall = {
+        callId,
+        callerId: currentUserId,
+        calleeId: toUserId,
+        conversationId,
+        callType,
+        startedAt: null,
+        invitedAt: new Date(),
+      };
+
+      await finalizeCall(offlineCall, "missed");
+
       socket.emit("call:unavailable", { toUserId });
       return;
     }
-
-    const callId = makeCallId(currentUserId, toUserId);
 
     // Nếu đã có cuộc gọi đang active giữa 2 người này thì chặn gọi trùng
     if (activeCalls.has(callId)) {

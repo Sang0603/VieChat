@@ -32,6 +32,8 @@ export function SocialAuthButtons() {
           <GoogleLogin
             text="continue_with"
             shape="rectangular"
+            context="signup"
+            useOneTap={false}
             onSuccess={async (credentialResponse) => {
               if (!credentialResponse.credential) {
                 toast.error("Đăng nhập Google thất bại.");

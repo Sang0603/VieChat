@@ -26,6 +26,7 @@ const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
   const addFriend = useFriendStore((s) => s.addFriend);
   const [profileOpen, setProfileOpen] = useState(false);
   const [sendingRequest, setSendingRequest] = useState(false);
+  const [unblocking, setUnblocking] = useState(false);
 
   let otherUser: Conversation["participants"][number] | null | undefined;
 
@@ -69,6 +70,22 @@ const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
       toast.error(error?.message ?? "Lỗi xảy ra khi gửi lời mời kết bạn");
     } finally {
       setSendingRequest(false);
+    }
+  };
+
+  const handleUnblock = async () => {
+    if (!otherUser || unblocking) return;
+
+    setUnblocking(true);
+    try {
+      const success = await useFriendStore.getState().unblockUser(otherUser._id);
+      if (success) {
+        toast.success("Đã bỏ chặn người dùng này");
+      } else {
+        toast.error("Lỗi xảy ra khi bỏ chặn, vui lòng thử lại");
+      }
+    } finally {
+      setUnblocking(false);
     }
   };
 
@@ -167,7 +184,18 @@ const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
       {isBlocked && (
         <div className="flex items-center gap-2 px-4 py-2 bg-destructive/10 text-destructive text-xs border-t border-destructive/20">
           <ShieldBan className="size-3.5 shrink-0" />
-          Bạn đã chặn người này. Gọi điện và nhắn tin sẽ không hoạt động.
+          <span className="flex-1">
+            Bạn đã chặn người này. Gọi điện và nhắn tin sẽ không hoạt động.
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-6 px-2 text-xs border-destructive/30 text-destructive hover:bg-destructive/10"
+            onClick={handleUnblock}
+            disabled={unblocking}
+          >
+            {unblocking ? <Loader2 className="size-3.5 animate-spin" /> : "Bỏ chặn"}
+          </Button>
         </div>
       )}
 
