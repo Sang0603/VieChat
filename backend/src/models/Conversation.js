@@ -88,13 +88,24 @@ const conversationSchema = new mongoose.Schema(
     },
     // 🆕 MỚI THÊM: danh sách user đã "xóa" (ẩn) đoạn chat này phía họ.
     // Không xóa conversation/message thật — chỉ ẩn khỏi sidebar của user đó.
-    // Nếu có tin nhắn mới tới, sẽ tự bỏ user đó ra khỏi hiddenFor (hiện lại).
+    // Chỉ tự hiện lại khi CHÍNH người đã xóa chủ động gửi tin nhắn lại
+    // (qua tìm kiếm) — xem sendDirectMessage/createConversation. Nếu người
+    // còn lại nhắn tới trước, đoạn chat KHÔNG tự hiện lại phía người đã xóa.
     hiddenFor: [
       {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",
       },
     ],
+    // 🆕 MỚI THÊM: mốc thời gian mỗi user bấm "Xóa đoạn chat" lần gần nhất.
+    // Dùng để lọc tin nhắn cũ ra khỏi lịch sử của RIÊNG người đó (getMessages
+    // chỉ trả tin nhắn tạo SAU mốc này) — tạo cảm giác "mất hết lịch sử cũ"
+    // dù dữ liệu thật vẫn còn nguyên cho người kia. Key là userId dạng string.
+    clearedFor: {
+      type: Map,
+      of: Date,
+      default: {},
+    },
   },
   {
     timestamps: true,

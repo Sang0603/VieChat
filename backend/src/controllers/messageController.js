@@ -32,9 +32,6 @@ export const uploadChatImage = async (req, res) => {
   }
 };
 
-// 👇 MỚI THÊM: upload video tin nhắn (chỉ upload lên Cloudinary + trả url,
-// KHÔNG tạo Message ở đây — client sẽ gọi sendDirectMessage/sendGroupMessage
-// sau, giống hệt luồng ảnh hiện tại)
 export const uploadChatVideo = async (req, res) => {
   try {
     const file = req.file;
@@ -48,7 +45,7 @@ export const uploadChatVideo = async (req, res) => {
     return res.status(200).json({
       videoUrl: result.secure_url,
       thumbnailUrl: result.eager?.[0]?.secure_url ?? null,
-      duration: result.duration ?? null, // giây
+      duration: result.duration ?? null,
     });
   } catch (error) {
     console.error("Lỗi xảy ra khi upload video tin nhắn", error);
@@ -59,7 +56,7 @@ export const uploadChatVideo = async (req, res) => {
 const attachReplyPreview = async (message) => {
   await message.populate({
     path: "replyTo",
-    select: "content imgUrl videoUrl thumbnailUrl senderId", // 👈 thêm videoUrl, thumbnailUrl
+    select: "content imgUrl videoUrl thumbnailUrl senderId",
     populate: { path: "senderId", select: "displayName" },
   });
 
@@ -70,7 +67,7 @@ const attachReplyPreview = async (message) => {
       _id: plain.replyTo._id,
       content: plain.replyTo.content,
       imgUrl: plain.replyTo.imgUrl,
-      videoUrl: plain.replyTo.videoUrl, // 👈 MỚI THÊM
+      videoUrl: plain.replyTo.videoUrl,
       senderId: plain.replyTo.senderId?._id ?? plain.replyTo.senderId,
       senderName: plain.replyTo.senderId?.displayName,
     };
@@ -85,9 +82,9 @@ export const sendDirectMessage = async (req, res) => {
       recipientId,
       content,
       imgUrl,
-      videoUrl, // 👈 MỚI THÊM
-      thumbnailUrl, // 👈 MỚI THÊM
-      duration, // 👈 MỚI THÊM
+      videoUrl,
+      thumbnailUrl,
+      duration,
       conversationId,
       replyTo,
     } = req.body;
@@ -138,6 +135,20 @@ export const sendDirectMessage = async (req, res) => {
       }
     }
 
+    // 🆕 MỚI THÊM: nếu chính người GỬI tin nhắn này trước đó đã "xóa" đoạn
+    // chat (đang nằm trong hiddenFor), thì hành động chủ động nhắn lại (qua
+    // tìm kiếm) sẽ tự gỡ họ khỏi hiddenFor để đoạn chat hiện lại trong
+    // sidebar của họ. KHÔNG đụng vào clearedFor -> lịch sử tin nhắn cũ (từ
+    // trước lúc xóa) vẫn bị ẩn vĩnh viễn với riêng họ.
+    // Chỉ xử lý cho senderId — nếu người nhận (otherUser) đã xóa đoạn chat
+    // này thì việc sender nhắn tới KHÔNG làm nó tự hiện lại phía người nhận,
+    // đúng yêu cầu "chỉ hiện lại khi chính người xóa chủ động tìm kiếm".
+    if (conversation.hiddenFor?.some((id) => id.toString() === senderId.toString())) {
+      conversation.hiddenFor = conversation.hiddenFor.filter(
+        (id) => id.toString() !== senderId.toString()
+      );
+    }
+
     const otherUserId =
       conversation.participants
         .map((p) => p.userId.toString())
@@ -174,9 +185,9 @@ export const sendDirectMessage = async (req, res) => {
       senderId,
       content,
       imgUrl,
-      videoUrl, // 👈 MỚI THÊM
-      thumbnailUrl, // 👈 MỚI THÊM
-      duration, // 👈 MỚI THÊM
+      videoUrl,
+      thumbnailUrl,
+      duration,
       replyTo: replyTo || undefined,
     });
 
@@ -201,9 +212,9 @@ export const sendGroupMessage = async (req, res) => {
       conversationId,
       content,
       imgUrl,
-      videoUrl, // 👈 MỚI THÊM
-      thumbnailUrl, // 👈 MỚI THÊM
-      duration, // 👈 MỚI THÊM
+      videoUrl,
+      thumbnailUrl,
+      duration,
       replyTo,
     } = req.body;
     const senderId = req.user._id;
@@ -228,9 +239,9 @@ export const sendGroupMessage = async (req, res) => {
       senderId,
       content,
       imgUrl,
-      videoUrl, // 👈 MỚI THÊM
-      thumbnailUrl, // 👈 MỚI THÊM
-      duration, // 👈 MỚI THÊM
+      videoUrl,
+      thumbnailUrl,
+      duration,
       replyTo: replyTo || undefined,
     });
 

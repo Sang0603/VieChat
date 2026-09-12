@@ -37,6 +37,16 @@ export const createConversation = async (req, res) => {
         });
 
         await conversation.save();
+      } else if (conversation.hiddenFor?.some((id) => id.toString() === userId.toString())) {
+        // 🆕 MỚI THÊM: chính người ĐÃ xóa đoạn chat này giờ chủ động tạo lại
+        // (qua tìm kiếm) -> gỡ họ khỏi hiddenFor để nó hiện lại trong sidebar.
+        // KHÔNG đụng vào clearedFor -> lịch sử tin nhắn cũ vẫn bị ẩn vĩnh viễn
+        // với riêng họ, đúng như hành vi "xóa xong mất hết, muốn thấy lại
+        // phải nhắn mới".
+        conversation.hiddenFor = conversation.hiddenFor.filter(
+          (id) => id.toString() !== userId.toString()
+        );
+        await conversation.save();
       }
     }
 
@@ -170,8 +180,18 @@ export const getMessages = async (req, res) => {
 
     const query = { conversationId };
 
-    if (cursor) {
+    // 🆕 MỚI THÊM: nếu user này đã từng "xóa" đoạn chat, chỉ trả về tin nhắn
+    // tạo SAU thời điểm xóa gần nhất -> lịch sử cũ coi như biến mất vĩnh viễn
+    // với riêng họ, dù dữ liệu thật vẫn còn nguyên cho người kia.
+    // conversation.clearedFor là Map nên khi .lean() nó sẽ là plain object.
+    const clearedAt = conversation.clearedFor?.[userId.toString()];
+
+    if (cursor && clearedAt) {
+      query.createdAt = { $lt: new Date(cursor), $gt: new Date(clearedAt) };
+    } else if (cursor) {
       query.createdAt = { $lt: new Date(cursor) };
+    } else if (clearedAt) {
+      query.createdAt = { $gt: new Date(clearedAt) };
     }
 
     let messages = await Message.find(query)
@@ -277,10 +297,14 @@ export const markAsSeen = async (req, res) => {
   }
 };
 
-// 🆕 MỚI THÊM: "xóa" đoạn chat phía user hiện tại — chỉ ẩn khỏi sidebar của
-// họ, không xóa message/conversation thật, không ảnh hưởng người còn lại.
-// Nếu có tin nhắn mới gửi tới sau đó, hàm gửi tin nhắn (messageController)
-// cần $pull userId ra khỏi hiddenFor để đoạn chat tự hiện lại (giống Messenger).
+// 🆕 MỚI THÊM: "xóa" đoạn chat phía user hiện tại.
+// - hiddenFor: ẩn khỏi sidebar của họ (không ảnh hưởng người còn lại)
+// - clearedFor[userId] = now: mốc để getMessages lọc bỏ toàn bộ tin nhắn
+//   cũ ra khỏi lịch sử của RIÊNG họ -> tạo cảm giác "mất hết", dù dữ liệu
+//   thật (Message documents) vẫn còn nguyên, người kia vẫn xem được đủ.
+// Đoạn chat CHỈ hiện lại phía họ khi CHÍNH họ chủ động tìm kiếm và nhắn tin
+// lại (xem createConversation/sendDirectMessage) — người kia nhắn tới trước
+// KHÔNG làm nó tự hiện lại.
 export const hideConversation = async (req, res) => {
   try {
     const { conversationId } = req.params;
@@ -304,6 +328,7 @@ export const hideConversation = async (req, res) => {
 
     await Conversation.findByIdAndUpdate(conversationId, {
       $addToSet: { hiddenFor: userId },
+      $set: { [`clearedFor.${userId.toString()}`]: new Date() },
     });
 
     return res.status(200).json({ message: "Đã xóa đoạn chat" });
