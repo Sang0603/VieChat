@@ -467,19 +467,31 @@ export const useChatStore = create<ChatState>()(
       // xóa (ẩn) đoạn chat phía mình khỏi sidebar.
       // Gọi API trước, chỉ xóa khỏi state khi API thành công. Nếu đoạn chat
       // đang được mở, bỏ chọn nó luôn để ChatWindow quay về màn hình chào.
+      // 🔧 FIX: trước đây chỉ xóa khỏi `conversations` nhưng KHÔNG xóa cache
+      // `messages[conversationId]`. Vì handleSelectConversation ở
+      // DirectMessageCard chỉ gọi fetchMessages() khi `!messages[id]`, nếu
+      // cache cũ còn nguyên thì lần mở lại đoạn chat (sau khi tạo lại
+      // conversation cùng _id) sẽ hiện lại y nguyên lịch sử tin nhắn cũ,
+      // dù backend đã lọc theo clearedFor. Giờ xóa luôn cache tin nhắn để
+      // lần sau bắt buộc phải fetch lại từ server.
       hideConversation: async (conversationId) => {
         try {
           await chatService.hideConversation(conversationId);
 
-          set((state) => ({
-            conversations: state.conversations.filter(
-              (c) => c._id !== conversationId
-            ),
-            activeConversationId:
-              state.activeConversationId === conversationId
-                ? null
-                : state.activeConversationId,
-          }));
+          set((state) => {
+            const { [conversationId]: _removed, ...restMessages } = state.messages;
+
+            return {
+              conversations: state.conversations.filter(
+                (c) => c._id !== conversationId
+              ),
+              messages: restMessages, // 🔧 FIX: xóa cache tin nhắn của đoạn chat này
+              activeConversationId:
+                state.activeConversationId === conversationId
+                  ? null
+                  : state.activeConversationId,
+            };
+          });
         } catch (error) {
           console.error("Lỗi xảy ra khi xóa đoạn chat", error);
           throw error;
