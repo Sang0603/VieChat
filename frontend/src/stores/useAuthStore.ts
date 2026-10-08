@@ -26,29 +26,32 @@ export const useAuthStore = create<AuthState>()(
         localStorage.clear();
         sessionStorage.clear();
       },
-      signUp: async (username, password, email, firstName, lastName) => {
+      signUp: async (password, email, firstName, lastName) => {
         try {
           set({ loading: true });
 
           //  gọi api
-          await authService.signUp(username, password, email, firstName, lastName);
+          await authService.signUp(password, email, firstName, lastName);
 
           toast.success(
             "Đăng ký thành công! Bạn sẽ được chuyển sang trang đăng nhập."
           );
         } catch (error) {
           console.error(error);
-          toast.error("Đăng ký không thành công");
+          const message =
+            (error as { response?: { data?: { message?: string } } })?.response?.data
+              ?.message ?? "Đăng ký không thành công";
+          toast.error(message);
         } finally {
           set({ loading: false });
         }
       },
-      signIn: async (username, password) => {
+      signIn: async (email, password) => {
         try {
           get().clearState();
           set({ loading: true });
 
-          const { accessToken } = await authService.signIn(username, password);
+          const { accessToken } = await authService.signIn(email, password);
           get().setAccessToken(accessToken);
 
           await get().fetchMe();

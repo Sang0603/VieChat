@@ -23,7 +23,9 @@ const AddFriendModal = () => {
   const [isFound, setIsFound] = useState<boolean | null>(null);
   const [searchUser, setSearchUser] = useState<User>();
   const [searchedUsername, setSearchedUsername] = useState("");
-  const { loading, searchByUsername, addFriend } = useFriendStore();
+  // 👇 MỚI THÊM: danh sách kết quả khi có nhiều người trùng/khớp tên
+  const [results, setResults] = useState<User[]>([]);
+  const { loading, searchUsersByName, addFriend } = useFriendStore();
 
   const {
     register,
@@ -38,25 +40,38 @@ const AddFriendModal = () => {
   const usernameValue = watch("username");
 
   const handleSearch = handleSubmit(async (data) => {
-    const username = data.username.trim();
-    if (!username) return;
+    const name = data.username.trim();
+    if (!name) return;
 
     setIsFound(null);
-    setSearchedUsername(username);
+    setResults([]);
+    setSearchUser(undefined);
+    setSearchedUsername(name);
 
     try {
-      const foundUser = await searchByUsername(username);
-      if (foundUser) {
-        setIsFound(true);
-        setSearchUser(foundUser);
-      } else {
+      const users = await searchUsersByName(name);
+
+      if (users.length === 0) {
         setIsFound(false);
+      } else if (users.length === 1) {
+        // chỉ có 1 người -> sang luôn bước gửi lời mời
+        setSearchUser(users[0]);
+        setIsFound(true);
+      } else {
+        // nhiều người -> hiện danh sách để chọn đúng người
+        setResults(users);
       }
     } catch (error) {
       console.error(error);
       setIsFound(false);
     }
   });
+
+  // 👇 MỚI THÊM: chọn 1 người trong danh sách kết quả
+  const handleSelect = (user: User) => {
+    setSearchUser(user);
+    setIsFound(true);
+  };
 
   const handleSend = handleSubmit(async (data) => {
     if (!searchUser) return;
@@ -78,6 +93,8 @@ const AddFriendModal = () => {
     reset();
     setSearchedUsername("");
     setIsFound(null);
+    setResults([]);
+    setSearchUser(undefined);
   };
 
   return (
@@ -103,6 +120,8 @@ const AddFriendModal = () => {
               loading={loading}
               isFound={isFound}
               searchedUsername={searchedUsername}
+              results={results}
+              onSelect={handleSelect}
               onSubmit={handleSearch}
               onCancel={handleCancel}
             />
@@ -114,7 +133,8 @@ const AddFriendModal = () => {
             <SendFriendRequestForm
               register={register}
               loading={loading}
-              searchedUsername={searchedUsername}
+              // 🔧 SỬA: hiện đúng tên hiển thị thật của người tìm được
+              searchedUsername={searchUser?.displayName ?? searchedUsername}
               onSubmit={handleSend}
               onBack={() => setIsFound(null)}
             />

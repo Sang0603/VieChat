@@ -15,19 +15,71 @@ export const authMe = async (req, res) => {
   }
 };
 
+// 👇 MỚI THÊM: bảng chữ tiếng Việt có dấu, dùng để tìm KHÔNG phân biệt dấu
+// (gõ "sang" vẫn khớp "Sáng", gõ "d" khớp cả "đ")
+const VIET_CHARS = {
+  a: "aàáảãạăằắẳẵặâầấẩẫậ",
+  e: "eèéẻẽẹêềếểễệ",
+  i: "iìíỉĩị",
+  o: "oòóỏõọôồốổỗộơờớởỡợ",
+  u: "uùúủũụưừứửữự",
+  y: "yỳýỷỹỵ",
+  d: "dđ",
+};
+
+// 👇 MỚI THÊM: biến chuỗi người dùng gõ thành regex khớp từng phần,
+// không phân biệt hoa/thường và dấu. Ký tự đặc biệt đều được escape.
+const buildNameRegex = (input) => {
+  const normalized = input
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // bỏ dấu
+    .replace(/đ/gi, "d")
+    .toLowerCase();
+
+  const pattern = normalized
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((token) =>
+      [...token]
+        .map((ch) => {
+          const variants = VIET_CHARS[ch];
+          if (variants) return `[${variants}${variants.toUpperCase()}]`;
+          return ch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        })
+        .join("")
+    )
+    .join("\\s+");
+
+  return new RegExp(pattern, "i");
+};
+
+// 🔧 SỬA: tìm người dùng theo TÊN HIỂN THỊ (displayName).
+// - khớp một phần, không phân biệt hoa/thường và dấu
+// - loại trừ chính mình, tối đa 10 kết quả
+// - trả về `users` (danh sách) và `user` (người đầu tiên) để code cũ không vỡ
+// - giữ tên hàm searchUserByUsername để userRoute.js không phải sửa
 export const searchUserByUsername = async (req, res) => {
   try {
-    const { username } = req.query;
+    const { name } = req.query;
 
-    if (!username || username.trim() === "") {
-      return res.status(400).json({ message: "Cần cung cấp username trong query." });
+    if (typeof name !== "string" || name.trim() === "") {
+      return res
+        .status(400)
+        .json({ message: "Cần cung cấp tên hiển thị trong query." });
     }
 
-    const user = await User.findOne({ username }).select(
-      "_id displayName username avatarUrl"
-    );
+    const keyword = name.trim().slice(0, 50);
 
-    return res.status(200).json({ user });
+    const users = await User.find({
+      displayName: buildNameRegex(keyword),
+      _id: { $ne: req.user._id },
+    })
+      .sort({ displayName: 1 })
+      .limit(10)
+      .select("_id displayName username avatarUrl");
+
+    return res.status(200).json({ users, user: users[0] ?? null });
   } catch (error) {
     console.error("Lỗi xảy ra khi searchUserByUsername", error);
     return res.status(500).json({ message: "Lỗi hệ thống" });

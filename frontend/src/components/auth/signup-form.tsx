@@ -23,7 +23,6 @@ const passwordSchema = z
 const signUpSchema = z.object({
   firstname: z.string().min(1, "Tên bắt buộc phải có"),
   lastname: z.string().min(1, "Họ bắt buộc phải có"),
-  username: z.string().min(3, "Tên đăng nhập phải có ít nhất 3 ký tự"),
   email: z.email("Email không hợp lệ"),
   password: passwordSchema,
 });
@@ -43,10 +42,10 @@ export function SignupForm({ className, ...props }: React.ComponentProps<"div">)
   });
 
   const onSubmit = async (data: SignUpFormValues) => {
-    const { firstname, lastname, username, email, password } = data;
+    const { firstname, lastname, email, password } = data;
 
-    // gọi backend để signup
-    await signUp(username, password, email, firstname, lastname);
+    // gọi backend để signup (tên hiển thị = Họ + Tên, do backend ghép)
+    await signUp(password, email, firstname, lastname);
 
     navigate("/signin");
   };
@@ -103,7 +102,7 @@ export function SignupForm({ className, ...props }: React.ComponentProps<"div">)
                 </div>
                 <div className="space-y-2">
                   <Label
-                    htmlFor="fistname"
+                    htmlFor="firstname"
                     className="block text-sm"
                   >
                     Tên
@@ -117,25 +116,6 @@ export function SignupForm({ className, ...props }: React.ComponentProps<"div">)
                     <p className="error-message">{errors.firstname.message}</p>
                   )}
                 </div>
-              </div>
-
-              {/* username */}
-              <div className="flex flex-col gap-3">
-                <Label
-                  htmlFor="username"
-                  className="block text-sm"
-                >
-                  Tên đăng nhập
-                </Label>
-                <Input
-                  type="text"
-                  id="username"
-                  placeholder="VieChat"
-                  {...register("username")}
-                />
-                {errors.username && (
-                  <p className="error-message">{errors.username.message}</p>
-                )}
               </div>
 
               {/* email */}

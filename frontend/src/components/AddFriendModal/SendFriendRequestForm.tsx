@@ -25,7 +25,7 @@ const SendFriendRequestForm = ({
     <form onSubmit={onSubmit}>
       <div className="space-y-4">
         <span className="success-message">
-          Tìm thấy <span className="font-semibold">@{searchedUsername}</span> rồi nè
+          Tìm thấy <span className="font-semibold">{searchedUsername}</span> rồi nè
           🎉
         </span>
 
@@ -58,7 +58,7 @@ const SendFriendRequestForm = ({
           <Button
             type="submit"
             disabled={loading}
-            className="flex-1 bg-gradient-chat text-white hover:opactity-90 transition-smooth"
+            className="flex-1 bg-gradient-chat text-white hover:opacity-90 transition-smooth"
           >
             {loading ? (
               <span>Đang gửi...</span>

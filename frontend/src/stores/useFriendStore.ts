@@ -26,6 +26,21 @@ export const useFriendStore = create<FriendState>((set, _get) => ({
       set({ loading: false });
     }
   },
+  // 👇 MỚI THÊM: tìm theo tên hiển thị, trả về danh sách
+  searchUsersByName: async (name) => {
+    try {
+      set({ loading: true });
+
+      const users = await friendService.searchUsersByName(name);
+
+      return users;
+    } catch (error) {
+      console.error("Lỗi xảy ra khi tìm user bằng tên hiển thị", error);
+      return [];
+    } finally {
+      set({ loading: false });
+    }
+  },
   addFriend: async (to, message) => {
     try {
       set({ loading: true });

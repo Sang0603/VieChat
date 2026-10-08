@@ -13,7 +13,7 @@ import { Eye, EyeOff } from "lucide-react";
 import { SocialAuthButtons } from "./SocialAuthButtons";
 
 const signInSchema = z.object({
-  username: z.string().min(3, "Tên đăng nhập phải có ít nhất 3 ký tự"),
+  email: z.email("Email không hợp lệ"),
   password: z.string().min(6, "Mật khẩu phải có ít nhất 6 ký tự"),
 });
 
@@ -32,8 +32,8 @@ export function SigninForm({ className, ...props }: React.ComponentProps<"div">)
   });
 
   const onSubmit = async (data: SignInFormValues) => {
-    const { username, password } = data;
-    const success = await signIn(username, password);
+    const { email, password } = data;
+    const success = await signIn(email, password);
     if (success) {
       // signIn() đã gọi fetchMe() bên trong nên lúc này store đã có user mới
       // nhất. Đọc trực tiếp qua getState() để chắc chắn lấy giá trị vừa cập
@@ -74,23 +74,24 @@ export function SigninForm({ className, ...props }: React.ComponentProps<"div">)
                 </p>
               </div>
 
-              {/* username */}
+              {/* tài khoản (email) */}
               <div className="flex flex-col gap-3">
                 <Label
-                  htmlFor="username"
+                  htmlFor="email"
                   className="block text-sm"
                 >
-                  Tên đăng nhập
+                  Tài khoản
                 </Label>
                 <Input
-                  type="text"
-                  id="username"
-                  placeholder="VieChat"
-                  {...register("username")}
+                  type="email"
+                  id="email"
+                  placeholder="m@gmail.com"
+                  autoComplete="email"
+                  {...register("email")}
                 />
-                {errors.username && (
+                {errors.email && (
                   <p className="text-destructive text-sm">
-                    {errors.username.message}
+                    {errors.email.message}
                   </p>
                 )}
               </div>

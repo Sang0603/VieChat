@@ -12,17 +12,16 @@ const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export const signUp = async (req, res) => {
   try {
-    const { username, password, email, firstName, lastName } = req.body;
+    const { password, email, firstName, lastName } = req.body;
 
-    if (!username || !password || !email || !firstName || !lastName) {
+    if (!password || !email || !firstName || !lastName) {
       return res.status(400).json({
-        message: "Không thể thiếu username, password, email, firstName, và lastName",
+        message: "Không thể thiếu password, email, firstName, và lastName",
       });
     }
 
     // kiểm tra kiểu dữ liệu đầu vào (tránh crash khi client gửi object/array thay vì string)
     if (
-      typeof username !== "string" ||
       typeof password !== "string" ||
       typeof email !== "string" ||
       typeof firstName !== "string" ||
@@ -31,7 +30,15 @@ export const signUp = async (req, res) => {
       return res.status(400).json({ message: "Dữ liệu đầu vào không hợp lệ" });
     }
 
-    if (!emailRegex.test(email)) {
+    const cleanEmail = email.toLowerCase().trim();
+    const cleanFirstName = firstName.trim();
+    const cleanLastName = lastName.trim();
+
+    if (!cleanFirstName || !cleanLastName) {
+      return res.status(400).json({ message: "Họ và tên không được để trống" });
+    }
+
+    if (!emailRegex.test(cleanEmail)) {
       return res.status(400).json({ message: "Email không hợp lệ" });
     }
 
@@ -45,15 +52,8 @@ export const signUp = async (req, res) => {
       });
     }
 
-    // kiểm tra username tồn tại chưa
-    const duplicate = await User.findOne({ username: username.toLowerCase().trim() });
-
-    if (duplicate) {
-      return res.status(409).json({ message: "username đã tồn tại" });
-    }
-
     // kiểm tra email tồn tại chưa
-    const duplicateEmail = await User.findOne({ email: email.toLowerCase().trim() });
+    const duplicateEmail = await User.findOne({ email: cleanEmail });
 
     if (duplicateEmail) {
       return res.status(409).json({ message: "email đã được sử dụng" });
@@ -62,12 +62,15 @@ export const signUp = async (req, res) => {
     // mã hoá password
     const hashedPassword = await bcrypt.hash(password, 10); // salt = 10
 
-    // tạo user mới
+    // username không còn do người dùng nhập -> tự sinh từ phần trước @ của email
+    const username = await generateUniqueUsername(cleanEmail.split("@")[0]);
+
+    // tạo user mới (tên hiển thị = Họ + Tên)
     await User.create({
       username,
       hashedPassword,
-      email,
-      displayName: `${lastName} ${firstName}`,
+      email: cleanEmail,
+      displayName: `${cleanLastName} ${cleanFirstName}`,
       authProvider: "local",
     });
 
@@ -81,24 +84,24 @@ export const signUp = async (req, res) => {
 
 export const signIn = async (req, res) => {
   try {
-    // lấy inputs
-    const { username, password } = req.body;
+    // lấy inputs (tài khoản = email)
+    const { email, password } = req.body;
 
-    if (!username || !password) {
-      return res.status(400).json({ message: "Thiếu username hoặc password." });
+    if (!email || !password) {
+      return res.status(400).json({ message: "Thiếu email hoặc password." });
     }
 
-    if (typeof username !== "string" || typeof password !== "string") {
+    if (typeof email !== "string" || typeof password !== "string") {
       return res.status(400).json({ message: "Dữ liệu đầu vào không hợp lệ" });
     }
 
     // lấy hashedPassword trong db để so với password input
-    const user = await User.findOne({ username: username.toLowerCase().trim() });
+    const user = await User.findOne({ email: email.toLowerCase().trim() });
 
     if (!user) {
       return res
         .status(401)
-        .json({ message: "username hoặc password không chính xác" });
+        .json({ message: "Email hoặc mật khẩu không chính xác" });
     }
 
     // tài khoản tạo bằng Google có thể chưa có password
@@ -115,7 +118,7 @@ export const signIn = async (req, res) => {
     if (!passwordCorrect) {
       return res
         .status(401)
-        .json({ message: "username hoặc password không chính xác" });
+        .json({ message: "Email hoặc mật khẩu không chính xác" });
     }
 
     // nếu khớp, tạo accessToken với JWT
@@ -215,6 +218,7 @@ export const refreshToken = async (req, res) => {
 // ================== GOOGLE LOGIN ==================
 
 // tạo username không trùng từ phần trước @ của email
+// (dùng cho cả đăng ký thường lẫn đăng nhập Google)
 const generateUniqueUsername = async (base) => {
   const cleanBase =
     base
@@ -292,7 +296,7 @@ export const googleSignIn = async (req, res) => {
         authProvider: "google",
       });
     } else if (!user.googleId) {
-      // user đã tồn tại (đăng ký bằng username/password trước đó) -> gắn thêm googleId
+      // user đã tồn tại (đăng ký bằng email/password trước đó) -> gắn thêm googleId
       user.googleId = payload.sub;
       if (!user.avatarUrl) user.avatarUrl = payload.picture;
       await user.save();

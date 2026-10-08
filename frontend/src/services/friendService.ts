@@ -2,9 +2,16 @@ import api from "@/lib/axios";
 import type { Friend } from "@/types/user";
 
 export const friendService = {
-  async searchByUsername(username: string) {
-    const res = await api.get(`/users/search?username=${username}`);
+  // giữ lại cho code cũ: trả về người đầu tiên khớp tên hiển thị
+  async searchByUsername(name: string) {
+    const res = await api.get("/users/search", { params: { name } });
     return res.data.user;
+  },
+
+  // 👇 MỚI THÊM: tìm theo tên hiển thị, trả về DANH SÁCH (tối đa 10 người)
+  async searchUsersByName(name: string) {
+    const res = await api.get("/users/search", { params: { name } });
+    return res.data.users ?? [];
   },
 
   async sendFriendRequest(to: string, message?: string) {

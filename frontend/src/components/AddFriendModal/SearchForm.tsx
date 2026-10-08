@@ -38,15 +38,15 @@ const SearchForm = ({
           htmlFor="username"
           className="text-sm font-semibold"
         >
-          Tìm bằng username
+          Tìm bằng tên hiển thị
         </Label>
 
         <Input
           id="username"
-          placeholder="Gõ tên username vào đây..."
+          placeholder="Gõ tên hiển thị vào đây..."
           className="glass border-border/50 focus:border-primary/50 transition-smooth"
           {...register("username", {
-            required: "Username không được bỏ trống",
+            required: "Tên hiển thị không được bỏ trống",
           })}
         ></Input>
         {errors.username && (
@@ -55,8 +55,8 @@ const SearchForm = ({
 
         {isFound === false && (
           <span className="error-message">
-            Không tìm thấy
-            <span className="font-semibold">@{searchedUsername}</span>
+            Không tìm thấy{" "}
+            <span className="font-semibold">{searchedUsername}</span>
           </span>
         )}
       </div>

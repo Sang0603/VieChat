@@ -11,14 +11,15 @@ export interface AuthState {
   setAccessToken: (accessToken: string) => void;
   setUser: (user: User) => void;
   clearState: () => void;
+  // 🔧 SỬA: bỏ username (backend tự sinh), tên hiển thị = Họ + Tên
   signUp: (
-    username: string,
     password: string,
     email: string,
     firstName: string,
     lastName: string
   ) => Promise<void>;
-  signIn: (username: string, password: string) => Promise<boolean>;
+  // 🔧 SỬA: tài khoản đăng nhập giờ là email
+  signIn: (email: string, password: string) => Promise<boolean>;
   // 👇 MỚI THÊM: đăng nhập/đăng ký bằng Google
   googleSignIn: (credential: string) => Promise<boolean>;
   signOut: () => Promise<void>;
@@ -151,6 +152,8 @@ export interface FriendState {
   // 👇 MỚI THÊM: danh sách id người ĐANG chặn mình (để hiện banner "bạn đã bị chặn")
   blockedMeIds: string[];
   searchByUsername: (username: string) => Promise<User | null>;
+  // 👇 MỚI THÊM: tìm theo tên hiển thị, trả về danh sách (tối đa 10 người)
+  searchUsersByName: (name: string) => Promise<User[]>;
   addFriend: (to: string, message?: string) => Promise<string>;
   getAllFriendRequests: () => Promise<void>;
   acceptRequest: (requestId: string) => Promise<void>;
