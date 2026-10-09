@@ -13,8 +13,10 @@ import { Eye, EyeOff } from "lucide-react";
 import { SocialAuthButtons } from "./SocialAuthButtons";
 
 const signInSchema = z.object({
-  email: z.email("Email không hợp lệ"),
-  password: z.string().min(6, "Mật khẩu phải có ít nhất 6 ký tự"),
+  // 🔧 SỬA: tài khoản nhập gì cũng được, chỉ cần không để trống
+  account: z.string().trim().min(1, "Vui lòng nhập tài khoản"),
+  // bỏ yêu cầu tối thiểu 6 ký tự để mật khẩu yếu vẫn đăng nhập được
+  password: z.string().min(1, "Vui lòng nhập mật khẩu"),
 });
 
 type SignInFormValues = z.infer<typeof signInSchema>;
@@ -32,8 +34,8 @@ export function SigninForm({ className, ...props }: React.ComponentProps<"div">)
   });
 
   const onSubmit = async (data: SignInFormValues) => {
-    const { email, password } = data;
-    const success = await signIn(email, password);
+    const { account, password } = data;
+    const success = await signIn(account, password);
     if (success) {
       // signIn() đã gọi fetchMe() bên trong nên lúc này store đã có user mới
       // nhất. Đọc trực tiếp qua getState() để chắc chắn lấy giá trị vừa cập
@@ -53,9 +55,12 @@ export function SigninForm({ className, ...props }: React.ComponentProps<"div">)
     >
       <Card className="overflow-hidden p-0 border-border">
         <CardContent className="p-0">
+          {/* noValidate tắt popup tiếng Anh của trình duyệt,
+              lỗi sẽ hiện ngay dưới từng ô bằng tiếng Việt */}
           <form
             className="p-6 md:p-10"
             onSubmit={handleSubmit(onSubmit)}
+            noValidate
           >
             <div className="flex flex-col gap-7 w-full">
               {/* header - logo */}
@@ -74,24 +79,24 @@ export function SigninForm({ className, ...props }: React.ComponentProps<"div">)
                 </p>
               </div>
 
-              {/* tài khoản (email) */}
+              {/* tài khoản (nhập gì cũng được) */}
               <div className="flex flex-col gap-3">
                 <Label
-                  htmlFor="email"
+                  htmlFor="account"
                   className="block text-sm"
                 >
                   Tài khoản
                 </Label>
                 <Input
-                  type="email"
-                  id="email"
-                  placeholder="m@gmail.com"
-                  autoComplete="email"
-                  {...register("email")}
+                  type="text"
+                  id="account"
+                  placeholder=""
+                  autoComplete="username"
+                  {...register("account")}
                 />
-                {errors.email && (
+                {errors.account && (
                   <p className="text-destructive text-sm">
-                    {errors.email.message}
+                    {errors.account.message}
                   </p>
                 )}
               </div>

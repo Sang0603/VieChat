@@ -74,27 +74,6 @@ const PersonalInfoForm = ({ userInfo }: Props) => {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="username">Tên người dùng</Label>
-            <Input
-              id="username"
-              value={userInfo.username ?? ""}
-              readOnly
-              className="glass-light border-border/30 cursor-default opacity-70"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              value={userInfo.email ?? ""}
-              readOnly
-              className="glass-light border-border/30 cursor-default opacity-70"
-            />
-          </div>
-
-          <div className="space-y-2">
             <Label htmlFor="phone">Số điện thoại</Label>
             <Input
               id="phone"

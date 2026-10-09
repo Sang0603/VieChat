@@ -46,7 +46,7 @@ const ProfileCard = ({ user }: ProfileCardProps) => {
         {/* status */}
         <Badge
           className={cn(
-            "flex items-center gap-1 capitalize",
+            "flex items-center gap-1",
             isOnline ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-700"
           )}
         >
@@ -57,7 +57,7 @@ const ProfileCard = ({ user }: ProfileCardProps) => {
             )}
           />
 
-          {isOnline ? "online" : "offline"}
+          {isOnline ? "Trực tuyến" : "Ngoại tuyến"}
         </Badge>
       </CardContent>
     </Card>

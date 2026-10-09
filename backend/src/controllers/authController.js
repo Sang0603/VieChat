@@ -8,7 +8,40 @@ import Session from "../models/Session.js";
 const ACCESS_TOKEN_TTL = "30m"; // thuờng là dưới 15m
 const REFRESH_TOKEN_TTL = 14 * 24 * 60 * 60 * 1000; // 14 ngày
 
-const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// 🔧 SỬA: quy tắc cho tài khoản MỚI (giống hệt frontend)
+// - chỉ gồm chữ không dấu (a-z), số, dấu chấm, gạch dưới
+// - dài 3 đến 30 ký tự
+// Giá trị tài khoản vẫn được lưu vào trường `email` trong DB để không phải
+// đổi model/index, nên body request vẫn gửi dưới tên `email`.
+// Chỉ áp dụng khi ĐĂNG KÝ; đăng nhập không kiểm tra định dạng nên các tài
+// khoản cũ (vd abc@gmail.com, 123456) vẫn đăng nhập bình thường.
+const ACCOUNT_MIN_LENGTH = 3;
+const ACCOUNT_MAX_LENGTH = 30;
+const ACCOUNT_CHARS_REGEX = /^[a-z0-9._]*$/;
+
+// 🔧 MỚI: đánh giá độ mạnh mật khẩu (giống hệt frontend signup-form.tsx)
+// - dưới 8 ký tự                  => "weak"
+// - thiếu 3 trong 5 tiêu chí      => "weak"
+// - thiếu 1-2 tiêu chí            => "medium"
+// - đủ 5 tiêu chí                 => "strong"
+// Chỉ áp dụng khi ĐĂNG KÝ. Đăng nhập không kiểm tra nên tài khoản cũ có
+// mật khẩu yếu vẫn đăng nhập được.
+const getPasswordStrength = (password) => {
+  const checks = [
+    password.length >= 8,
+    /[a-z]/.test(password),
+    /[A-Z]/.test(password),
+    /[0-9]/.test(password),
+    /[^a-zA-Z0-9]/.test(password),
+  ];
+
+  const missing = checks.filter((passed) => !passed).length;
+
+  if (password.length < 8) return "weak";
+  if (missing === 0) return "strong";
+  if (missing <= 2) return "medium";
+  return "weak";
+};
 
 export const signUp = async (req, res) => {
   try {
@@ -16,7 +49,7 @@ export const signUp = async (req, res) => {
 
     if (!password || !email || !firstName || !lastName) {
       return res.status(400).json({
-        message: "Không thể thiếu password, email, firstName, và lastName",
+        message: "Không thể thiếu tài khoản, mật khẩu, họ và tên",
       });
     }
 
@@ -30,7 +63,8 @@ export const signUp = async (req, res) => {
       return res.status(400).json({ message: "Dữ liệu đầu vào không hợp lệ" });
     }
 
-    const cleanEmail = email.toLowerCase().trim();
+    // tài khoản: cắt khoảng trắng, không phân biệt hoa thường
+    const cleanAccount = email.toLowerCase().trim();
     const cleanFirstName = firstName.trim();
     const cleanLastName = lastName.trim();
 
@@ -38,38 +72,48 @@ export const signUp = async (req, res) => {
       return res.status(400).json({ message: "Họ và tên không được để trống" });
     }
 
-    if (!emailRegex.test(cleanEmail)) {
-      return res.status(400).json({ message: "Email không hợp lệ" });
-    }
-
-    // kiểm tra mật khẩu mạnh (bắt buộc, tránh bị bypass qua API trực tiếp)
-    const strongPasswordRegex =
-      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^a-zA-Z0-9]).{8,}$/;
-    if (!strongPasswordRegex.test(password)) {
+    if (!ACCOUNT_CHARS_REGEX.test(cleanAccount)) {
       return res.status(400).json({
-        message:
-          "Mật khẩu phải có ít nhất 8 ký tự, gồm chữ hoa, chữ thường, số và ký tự đặc biệt.",
+        message: "Tài khoản chỉ gồm chữ không dấu, số, dấu chấm và gạch dưới",
       });
     }
 
-    // kiểm tra email tồn tại chưa
-    const duplicateEmail = await User.findOne({ email: cleanEmail });
+    if (
+      cleanAccount.length < ACCOUNT_MIN_LENGTH ||
+      cleanAccount.length > ACCOUNT_MAX_LENGTH
+    ) {
+      return res.status(400).json({
+        message: `Tài khoản phải từ ${ACCOUNT_MIN_LENGTH} đến ${ACCOUNT_MAX_LENGTH} ký tự`,
+      });
+    }
 
-    if (duplicateEmail) {
-      return res.status(409).json({ message: "email đã được sử dụng" });
+    // 🔧 SỬA: mật khẩu mức YẾU thì không cho đăng ký,
+    // mức TRUNG BÌNH hoặc MẠNH thì được.
+    if (getPasswordStrength(password) === "weak") {
+      return res.status(400).json({
+        message:
+          "Mật khẩu quá yếu. Cần ít nhất 8 ký tự và kết hợp chữ hoa, chữ thường, số hoặc ký tự đặc biệt",
+      });
+    }
+
+    // kiểm tra tài khoản tồn tại chưa
+    const duplicateAccount = await User.findOne({ email: cleanAccount });
+
+    if (duplicateAccount) {
+      return res.status(409).json({ message: "Tài khoản đã được sử dụng" });
     }
 
     // mã hoá password
     const hashedPassword = await bcrypt.hash(password, 10); // salt = 10
 
-    // username không còn do người dùng nhập -> tự sinh từ phần trước @ của email
-    const username = await generateUniqueUsername(cleanEmail.split("@")[0]);
+    // username không do người dùng nhập -> tự sinh từ tài khoản
+    const username = await generateUniqueUsername(cleanAccount);
 
     // tạo user mới (tên hiển thị = Họ + Tên)
     await User.create({
       username,
       hashedPassword,
-      email: cleanEmail,
+      email: cleanAccount,
       displayName: `${cleanLastName} ${cleanFirstName}`,
       authProvider: "local",
     });
@@ -84,11 +128,11 @@ export const signUp = async (req, res) => {
 
 export const signIn = async (req, res) => {
   try {
-    // lấy inputs (tài khoản = email)
+    // lấy inputs (tài khoản được gửi dưới tên `email`)
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({ message: "Thiếu email hoặc password." });
+      return res.status(400).json({ message: "Thiếu tài khoản hoặc mật khẩu." });
     }
 
     if (typeof email !== "string" || typeof password !== "string") {
@@ -101,7 +145,7 @@ export const signIn = async (req, res) => {
     if (!user) {
       return res
         .status(401)
-        .json({ message: "Email hoặc mật khẩu không chính xác" });
+        .json({ message: "Tài khoản hoặc mật khẩu không chính xác" });
     }
 
     // tài khoản tạo bằng Google có thể chưa có password
@@ -118,7 +162,7 @@ export const signIn = async (req, res) => {
     if (!passwordCorrect) {
       return res
         .status(401)
-        .json({ message: "Email hoặc mật khẩu không chính xác" });
+        .json({ message: "Tài khoản hoặc mật khẩu không chính xác" });
     }
 
     // nếu khớp, tạo accessToken với JWT
@@ -217,11 +261,12 @@ export const refreshToken = async (req, res) => {
 
 // ================== GOOGLE LOGIN ==================
 
-// tạo username không trùng từ phần trước @ của email
+// tạo username không trùng từ chuỗi gốc (phần trước @ của email, hoặc tài khoản)
 // (dùng cho cả đăng ký thường lẫn đăng nhập Google)
 const generateUniqueUsername = async (base) => {
   const cleanBase =
     base
+      .split("@")[0]
       .toLowerCase()
       .replace(/[^a-z0-9]/g, "")
       .slice(0, 20) || "user";
@@ -283,7 +328,7 @@ export const googleSignIn = async (req, res) => {
     let user = await User.findOne({ $or: [{ googleId: payload.sub }, { email }] });
 
     if (!user) {
-      const username = await generateUniqueUsername(email.split("@")[0]);
+      const username = await generateUniqueUsername(email);
       user = await User.create({
         username,
         email,
@@ -296,7 +341,7 @@ export const googleSignIn = async (req, res) => {
         authProvider: "google",
       });
     } else if (!user.googleId) {
-      // user đã tồn tại (đăng ký bằng email/password trước đó) -> gắn thêm googleId
+      // user đã tồn tại (đăng ký bằng tài khoản/password trước đó) -> gắn thêm googleId
       user.googleId = payload.sub;
       if (!user.avatarUrl) user.avatarUrl = payload.picture;
       await user.save();
