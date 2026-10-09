@@ -1,7 +1,9 @@
 import type { FieldErrors, UseFormRegister } from "react-hook-form";
 import type { IFormValues } from "../chat/AddFriendModal";
+import type { User } from "@/types/user";
 import { Label } from "../ui/label";
 import { Input } from "../ui/input";
+import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { DialogFooter } from "../ui/dialog";
 import { DialogClose } from "@radix-ui/react-dialog";
 import { Button } from "../ui/button";
@@ -14,6 +16,9 @@ interface SearchFormProps {
   usernameValue: string;
   isFound: boolean | null;
   searchedUsername: string;
+  // 👇 MỚI THÊM: danh sách kết quả khi có nhiều người khớp + hàm chọn 1 người
+  results: User[];
+  onSelect: (user: User) => void;
   onSubmit?: (e: React.FormEvent<HTMLFormElement>) => void;
   onCancel: () => void;
 }
@@ -25,6 +30,8 @@ const SearchForm = ({
   loading,
   isFound,
   searchedUsername,
+  results,
+  onSelect,
   onSubmit,
   onCancel,
 }: SearchFormProps) => {
@@ -58,6 +65,41 @@ const SearchForm = ({
             Không tìm thấy{" "}
             <span className="font-semibold">{searchedUsername}</span>
           </span>
+        )}
+
+        {/* 👇 MỚI THÊM: nhiều người khớp -> chọn đúng người muốn kết bạn */}
+        {results.length > 1 && (
+          <div className="max-h-56 space-y-1 overflow-y-auto rounded-lg border border-border/50 p-1">
+            <p className="px-2 pt-1 text-xs text-muted-foreground">
+              Chọn đúng người bạn muốn kết bạn:
+            </p>
+            {results.map((u) => (
+              <button
+                key={u._id}
+                type="button"
+                onClick={() => onSelect(u)}
+                className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-left transition-smooth hover:bg-accent"
+              >
+                <Avatar className="size-9">
+                  <AvatarImage
+                    src={u.avatarUrl ?? undefined}
+                    alt={u.displayName}
+                  />
+                  <AvatarFallback>
+                    {u.displayName?.charAt(0).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold">
+                    {u.displayName}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    @{u.username}
+                  </p>
+                </div>
+              </button>
+            ))}
+          </div>
         )}
       </div>
 
