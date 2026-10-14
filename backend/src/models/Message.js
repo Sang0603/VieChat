@@ -30,10 +30,10 @@ const messageSchema = new mongoose.Schema(
     duration: {
       type: Number, // giây, chỉ có giá trị khi có videoUrl
     },
-    // "text" (mặc định, tin nhắn thường) | "call" (log cuộc gọi)
+    // "text" (mặc định, tin nhắn thường) | "call" (log cuộc gọi) | "expense" (thông báo khoản chi)
     type: {
       type: String,
-      enum: ["text", "call"],
+      enum: ["text", "call", "expense"],
       default: "text",
     },
     // chỉ có giá trị khi type = "call"
@@ -47,6 +47,13 @@ const messageSchema = new mongoose.Schema(
       callerId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
       calleeId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
       durationInSeconds: { type: Number, default: 0 },
+    },
+    // 🆕 MỚI THÊM: chỉ có giá trị khi type = "expense"
+    expenseInfo: {
+      expenseId: { type: mongoose.Schema.Types.ObjectId, ref: "Expense" },
+      title: { type: String },
+      amount: { type: Number },
+      participantCount: { type: Number },
     },
     replyTo: {
       type: mongoose.Schema.Types.ObjectId,

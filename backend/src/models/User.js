@@ -69,6 +69,20 @@ const userSchema = new mongoose.Schema(
       enum: ["local", "google"],
       default: "local",
     },
+    // 👇 MỚI THÊM: tài khoản nhận tiền (dùng tạo mã VietQR khi chia tiền nhóm).
+    // select:false => mọi truy vấn bình thường (me, bạn bè, tìm kiếm...) KHÔNG
+    // bao giờ trả trường này ra; chỉ lấy khi chủ động select("+bankInfo").
+    bankInfo: {
+      type: new mongoose.Schema(
+        {
+          bankId: { type: String, trim: true }, // mã BIN ngân hàng (6 số)
+          accountNo: { type: String, trim: true },
+          accountName: { type: String, trim: true },
+        },
+        { _id: false }
+      ),
+      select: false,
+    },
   },
   {
     timestamps: true,

@@ -1,10 +1,12 @@
 import { create } from "zustand";
 import { io, type Socket } from "socket.io-client";
+import { toast } from "sonner"; // 🆕 MỚI THÊM
 import { useAuthStore } from "./useAuthStore";
 import type { SocketState } from "@/types/store";
-import { useChatStore } from "./useChatStore";
+import { useChatStore, dropConversationLocally } from "./useChatStore"; // 🆕 thêm dropConversationLocally
 import { useFriendStore } from "./useFriendStore";
 import { useCallStore } from "./useCallStore";
+import { useExpenseStore } from "./useExpenseStore"; // 👈 MỚI THÊM
 
 const baseURL = import.meta.env.VITE_SOCKET_URL;
 
@@ -80,6 +82,39 @@ export const useSocketStore = create<SocketState>((set, get) => ({
       socket.emit("join-conversation", conversation._id);
     });
 
+    // 🆕 MỚI THÊM: có người được thêm vào nhóm -> cập nhật danh sách thành viên
+    // realtime cho các thành viên cũ (không cần reload trang)
+    socket.on("group-members-added", ({ conversationId, participants }) => {
+      useChatStore.getState().updateConversation({
+        _id: conversationId,
+        participants,
+      });
+    });
+
+    // 🆕 MỚI THÊM: chủ nhóm kick thành viên.
+    // - Chính người bị kick: gỡ nhóm khỏi sidebar
+    // - Thành viên còn lại: cập nhật lại danh sách thành viên
+    socket.on("group-member-removed", ({ conversationId, removedId, participants }) => {
+      const me = useAuthStore.getState().user?._id;
+
+      if (removedId === me) {
+        dropConversationLocally(conversationId);
+        toast.info("Bạn đã bị xóa khỏi nhóm");
+        return;
+      }
+
+      useChatStore.getState().updateConversation({
+        _id: conversationId,
+        participants,
+      });
+    });
+
+    // 🆕 MỚI THÊM: chủ nhóm xóa nhóm -> gỡ nhóm khỏi sidebar của mọi thành viên
+    socket.on("group-deleted", ({ conversationId }) => {
+      dropConversationLocally(conversationId);
+      toast.info("Nhóm đã bị chủ nhóm xóa");
+    });
+
     socket.on("friend-request-accepted", ({ requestId, friend }) => {
       useFriendStore.getState().friendRequestAccepted(requestId, friend);
     });
@@ -136,6 +171,80 @@ export const useSocketStore = create<SocketState>((set, get) => ({
       useChatStore.getState().setUserTyping(conversationId, { userId }, false);
     });
     // ==================== HẾT PHẦN TYPING INDICATOR ====================
+
+    // ==================== 👇 MỚI THÊM: CHI TIÊU NHÓM REALTIME ====================
+    // có người thêm/xóa khoản chi hoặc báo đã chuyển tiền -> tải lại số dư.
+    // Chỉ tải lại nếu máy này đã từng mở bảng Chi tiêu của nhóm đó.
+    socket.on("expense-updated", ({ conversationId }) => {
+      useExpenseStore.getState().refresh(conversationId);
+    });
+
+    // 🆕 MỚI THÊM: khoản chi bị xóa -> backend đã xóa thẻ thông báo của nó khỏi chat,
+    // bỏ thẻ đó khỏi khung chat đang hiển thị. Nếu thẻ từng là tin cuối của nhóm thì
+    // backend gửi kèm tin cuối mới để sidebar cập nhật theo.
+    socket.on(
+      "messages-removed",
+      ({
+        conversationId,
+        messageIds,
+        lastMessage,
+        lastMessageAt,
+      }: {
+        conversationId: string;
+        messageIds: string[];
+        lastMessage?: {
+          _id: string;
+          content: string;
+          senderId: string;
+          createdAt: string;
+        } | null;
+        lastMessageAt?: string;
+      }) => {
+        const removed = new Set(messageIds);
+
+        useChatStore.setState((state) => {
+          const current = state.messages[conversationId];
+
+          const messages = current
+            ? {
+                ...state.messages,
+                [conversationId]: {
+                  ...current,
+                  items: current.items.filter((m) => !removed.has(m._id)),
+                },
+              }
+            : state.messages;
+
+          // lastMessage === undefined nghĩa là tin cuối không đổi
+          const conversations =
+            lastMessage === undefined
+              ? state.conversations
+              : state.conversations.map((c) =>
+                  c._id === conversationId
+                    ? {
+                        ...c,
+                        lastMessage: lastMessage
+                          ? {
+                              _id: lastMessage._id,
+                              content: lastMessage.content,
+                              createdAt: lastMessage.createdAt,
+                              sender: {
+                                _id: lastMessage.senderId,
+                                displayName: "",
+                                avatarUrl: null,
+                              },
+                            }
+                          : null,
+                        ...(lastMessageAt ? { lastMessageAt } : {}),
+                      }
+                    : c
+                );
+
+          return { messages, conversations };
+        });
+      }
+    );
+    // ==================== HẾT PHẦN CHI TIÊU NHÓM REALTIME ====================
   },
   disconnectSocket: () => {
     const socket = get().socket;

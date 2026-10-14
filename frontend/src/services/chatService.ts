@@ -1,5 +1,10 @@
 import api from "@/lib/axios";
-import type { ConversationResponse, Message, MessageReaction } from "@/types/chat";
+import type {
+  ConversationResponse,
+  Message,
+  MessageReaction,
+  Participant,
+} from "@/types/chat";
 
 interface FetchMessageProps {
   messages: Message[];
@@ -126,6 +131,34 @@ export const chatService = {
 
   async hideConversation(conversationId: string) {
     const res = await api.delete(`/conversations/${conversationId}`);
+    return res.data;
+  },
+
+  // 🆕 MỚI THÊM: thêm thành viên vào nhóm, trả về danh sách participants mới
+  async addGroupMembers(
+    conversationId: string,
+    memberIds: string[]
+  ): Promise<Participant[]> {
+    const res = await api.post(`/conversations/${conversationId}/members`, {
+      memberIds,
+    });
+    return res.data.participants;
+  },
+
+  // 🆕 MỚI THÊM: chủ nhóm kick thành viên, trả về danh sách participants mới
+  async removeGroupMember(
+    conversationId: string,
+    memberId: string
+  ): Promise<Participant[]> {
+    const res = await api.delete(
+      `/conversations/${conversationId}/members/${memberId}`
+    );
+    return res.data.participants;
+  },
+
+  // 🆕 MỚI THÊM: chủ nhóm xóa hẳn nhóm
+  async deleteGroup(conversationId: string) {
+    const res = await api.delete(`/conversations/${conversationId}/group`);
     return res.data;
   },
 };

@@ -12,7 +12,9 @@ import { useFriendStore } from "@/stores/useFriendStore";
 import CallButton from "../call/CallButton";
 import VideoCallButton from "../call/VideoCallButton";
 import FriendProfileDialog from "./FriendProfileDialog";
-import { ShieldBan, UserPlus, Loader2 } from "lucide-react";
+import ExpenseSheet from "../expense/ExpenseSheet"; // 👈 MỚI THÊM
+import GroupMembersDialog from "./GroupMembersDialog"; // 🆕 MỚI THÊM
+import { ShieldBan, UserPlus, Loader2, Wallet, Users } from "lucide-react"; // 🆕 thêm Users
 import { Button } from "../ui/button";
 import { toast } from "sonner";
 import { useStartCall } from "@/hooks/useStartCall"; // 👈 MỚI THÊM
@@ -29,6 +31,8 @@ const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
   const [profileOpen, setProfileOpen] = useState(false);
   const [sendingRequest, setSendingRequest] = useState(false);
   const [unblocking, setUnblocking] = useState(false);
+  const [expenseOpen, setExpenseOpen] = useState(false); // 👈 MỚI THÊM: bảng chi tiêu của nhóm
+  const [membersOpen, setMembersOpen] = useState(false); // 🆕 MỚI THÊM: xem/thêm thành viên nhóm
 
   let otherUser: Conversation["participants"][number] | null | undefined;
 
@@ -144,11 +148,10 @@ const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
             type="button"
             onClick={() => {
               if (chat?.type === "direct" && otherUser) setProfileOpen(true);
+              // 🆕 MỚI THÊM: bấm vào avatar/tên nhóm -> mở danh sách thành viên
+              if (chat?.type === "group") setMembersOpen(true);
             }}
-            disabled={chat.type !== "direct"}
-            className={`flex items-center gap-3 min-w-0 ${
-              chat.type === "direct" ? "cursor-pointer" : "cursor-default"
-            }`}
+            className="flex items-center gap-3 min-w-0 cursor-pointer"
           >
             <div className="relative">
               {chat.type === "direct" ? (
@@ -176,6 +179,12 @@ const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
               <h2 className="font-semibold text-foreground truncate">
                 {chat.type === "direct" ? otherUser?.displayName : chat.group?.name}
               </h2>
+              {/* 🆕 MỚI THÊM: hiện số thành viên dưới tên nhóm */}
+              {chat.type === "group" && !isTyping && (
+                <p className="text-xs text-muted-foreground truncate">
+                  {chat.participants.length} thành viên
+                </p>
+              )}
               {isStranger && (
                 <p className="text-xs text-muted-foreground truncate">Người lạ</p>
               )}
@@ -203,6 +212,30 @@ const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
                   conversationId={chat._id}
                 />
               </>
+            )}
+            {/* 🆕 MỚI THÊM: xem / thêm thành viên nhóm */}
+            {chat.type === "group" && (
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Thành viên nhóm"
+                title="Thành viên nhóm"
+                onClick={() => setMembersOpen(true)}
+              >
+                <Users className="size-5" />
+              </Button>
+            )}
+            {/* 👇 MỚI THÊM: chi tiêu chung của nhóm (chia tiền + VietQR) */}
+            {chat.type === "group" && (
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Chi tiêu của nhóm"
+                title="Chi tiêu của nhóm"
+                onClick={() => setExpenseOpen(true)}
+              >
+                <Wallet className="size-5" />
+              </Button>
             )}
             <Separator
               orientation="vertical"
@@ -264,6 +297,24 @@ const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
           onMessage={handleMessage} // 👈 MỚI THÊM
           onBlock={(friendId) => useFriendStore.getState().blockFriend(friendId)}
           onUnfriend={(friendId) => useFriendStore.getState().unfriend(friendId)}
+        />
+      )}
+
+      {/* 🆕 MỚI THÊM: dialog xem / thêm thành viên nhóm */}
+      {chat.type === "group" && (
+        <GroupMembersDialog
+          chat={chat}
+          open={membersOpen}
+          onOpenChange={setMembersOpen}
+        />
+      )}
+
+      {/* 👇 MỚI THÊM: bảng chi tiêu của nhóm */}
+      {chat.type === "group" && (
+        <ExpenseSheet
+          chat={chat}
+          open={expenseOpen}
+          onOpenChange={setExpenseOpen}
         />
       )}
     </header>

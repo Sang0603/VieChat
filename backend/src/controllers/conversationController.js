@@ -1,5 +1,7 @@
+import mongoose from "mongoose";
 import Conversation from "../models/Conversation.js";
 import Message from "../models/Message.js";
+import User from "../models/User.js"; // 🆕 MỚI THÊM
 import { io } from "../socket/index.js";
 
 export const createConversation = async (req, res) => {
@@ -334,6 +336,230 @@ export const hideConversation = async (req, res) => {
     return res.status(200).json({ message: "Đã xóa đoạn chat" });
   } catch (error) {
     console.error("Lỗi khi xóa đoạn chat", error);
+    return res.status(500).json({ message: "Lỗi hệ thống" });
+  }
+};
+
+// 🆕 MỚI THÊM: thêm thành viên vào nhóm chat.
+// - Chỉ áp dụng cho conversation type "group"
+// - Người gọi phải là thành viên của nhóm (ai trong nhóm cũng thêm được)
+// - Tự bỏ qua những người đã ở trong nhóm / id không hợp lệ / user không tồn tại
+// - Người mới: nhận "new-group" + được join vào room conversation
+// - Thành viên cũ: nhận "group-members-added" để cập nhật danh sách realtime
+export const addGroupMembers = async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const { memberIds } = req.body;
+    const userId = req.user._id.toString();
+
+    if (!Array.isArray(memberIds) || memberIds.length === 0) {
+      return res
+        .status(400)
+        .json({ message: "Danh sách thành viên cần thêm là bắt buộc" });
+    }
+
+    const conversation = await Conversation.findById(conversationId);
+
+    if (!conversation) {
+      return res.status(404).json({ message: "Không tìm thấy cuộc trò chuyện" });
+    }
+
+    if (conversation.type !== "group") {
+      return res
+        .status(400)
+        .json({ message: "Chỉ có thể thêm thành viên vào nhóm chat" });
+    }
+
+    const isMember = conversation.participants.some(
+      (p) => p.userId.toString() === userId
+    );
+
+    if (!isMember) {
+      return res.status(403).json({ message: "Bạn không ở trong nhóm này" });
+    }
+
+    const existingIds = new Set(
+      conversation.participants.map((p) => p.userId.toString())
+    );
+
+    // loại trùng, loại id sai định dạng, loại người đã trong nhóm
+    const candidateIds = [...new Set(memberIds.map(String))].filter(
+      (id) => mongoose.Types.ObjectId.isValid(id) && !existingIds.has(id)
+    );
+
+    if (candidateIds.length === 0) {
+      return res
+        .status(400)
+        .json({ message: "Những người này đã ở trong nhóm" });
+    }
+
+    // chỉ giữ lại user thật sự tồn tại trong DB
+    const validUsers = await User.find({ _id: { $in: candidateIds } }).select("_id");
+    const newIds = validUsers.map((u) => u._id.toString());
+
+    if (newIds.length === 0) {
+      return res.status(400).json({ message: "Không tìm thấy người dùng hợp lệ" });
+    }
+
+    newIds.forEach((id) => {
+      conversation.participants.push({ userId: id });
+    });
+
+    await conversation.save();
+
+    await conversation.populate([
+      { path: "participants.userId", select: "displayName avatarUrl" },
+      { path: "seenBy", select: "displayName avatarUrl" },
+      { path: "lastMessage.senderId", select: "displayName avatarUrl" },
+    ]);
+
+    const participants = (conversation.participants || [])
+      .filter((p) => p.userId)
+      .map((p) => ({
+        _id: p.userId._id,
+        displayName: p.userId.displayName,
+        avatarUrl: p.userId.avatarUrl ?? null,
+        joinedAt: p.joinedAt,
+      }));
+
+    const formatted = { ...conversation.toObject(), participants };
+
+    // 1) báo cho thành viên CŨ (đang ở trong room) trước, để người mới không nhận trùng
+    io.to(conversationId).emit("group-members-added", {
+      conversationId,
+      participants,
+    });
+
+    // 2) người mới: nhận conversation + join room để nhận tin nhắn realtime
+    newIds.forEach((id) => {
+      io.to(id).emit("new-group", formatted);
+      io.in(id).socketsJoin(conversationId);
+    });
+
+    return res.status(200).json({ participants });
+  } catch (error) {
+    console.error("Lỗi khi thêm thành viên vào nhóm", error);
+    return res.status(500).json({ message: "Lỗi hệ thống" });
+  }
+};
+
+// 🆕 MỚI THÊM: chủ nhóm kick 1 thành viên khỏi nhóm
+export const removeGroupMember = async (req, res) => {
+  try {
+    const { conversationId, memberId } = req.params;
+    const userId = req.user._id.toString();
+
+    if (!mongoose.Types.ObjectId.isValid(memberId)) {
+      return res.status(400).json({ message: "ID thành viên không hợp lệ" });
+    }
+
+    const conversation = await Conversation.findById(conversationId).lean();
+
+    if (!conversation) {
+      return res.status(404).json({ message: "Không tìm thấy cuộc trò chuyện" });
+    }
+
+    if (conversation.type !== "group") {
+      return res.status(400).json({ message: "Chỉ áp dụng cho nhóm chat" });
+    }
+
+    if (conversation.group?.createdBy?.toString() !== userId) {
+      return res
+        .status(403)
+        .json({ message: "Chỉ chủ nhóm mới có quyền xóa thành viên" });
+    }
+
+    if (memberId === userId) {
+      return res
+        .status(400)
+        .json({ message: "Chủ nhóm không thể tự xóa mình khỏi nhóm" });
+    }
+
+    const isMember = conversation.participants.some(
+      (p) => p.userId.toString() === memberId
+    );
+
+    if (!isMember) {
+      return res.status(404).json({ message: "Người này không ở trong nhóm" });
+    }
+
+    const updated = await Conversation.findByIdAndUpdate(
+      conversationId,
+      {
+        $pull: { participants: { userId: memberId }, seenBy: memberId },
+        $unset: { [`unreadCounts.${memberId}`]: "" },
+      },
+      { new: true }
+    ).populate([
+      { path: "participants.userId", select: "displayName avatarUrl" },
+    ]);
+
+    const participants = (updated.participants || [])
+      .filter((p) => p.userId)
+      .map((p) => ({
+        _id: p.userId._id,
+        displayName: p.userId.displayName,
+        avatarUrl: p.userId.avatarUrl ?? null,
+        joinedAt: p.joinedAt,
+      }));
+
+    // báo cho cả room nhóm + riêng người bị kick (socket.io tự loại trùng)
+    io.to(conversationId).to(memberId).emit("group-member-removed", {
+      conversationId,
+      removedId: memberId,
+      participants,
+    });
+
+    // cho tất cả socket của người bị kick rời room -> không nhận tin nhắn nhóm nữa
+    io.in(memberId).socketsLeave(conversationId);
+
+    return res.status(200).json({ participants });
+  } catch (error) {
+    console.error("Lỗi khi xóa thành viên khỏi nhóm", error);
+    return res.status(500).json({ message: "Lỗi hệ thống" });
+  }
+};
+
+// 🆕 MỚI THÊM: chủ nhóm xóa hẳn nhóm (xóa cho TẤT CẢ thành viên)
+export const deleteGroup = async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const userId = req.user._id.toString();
+
+    const conversation = await Conversation.findById(conversationId).lean();
+
+    if (!conversation) {
+      return res.status(404).json({ message: "Không tìm thấy cuộc trò chuyện" });
+    }
+
+    if (conversation.type !== "group") {
+      return res.status(400).json({ message: "Chỉ áp dụng cho nhóm chat" });
+    }
+
+    if (conversation.group?.createdBy?.toString() !== userId) {
+      return res
+        .status(403)
+        .json({ message: "Chỉ chủ nhóm mới có quyền xóa nhóm" });
+    }
+
+    const memberIds = conversation.participants.map((p) => p.userId.toString());
+
+    await Message.deleteMany({ conversationId });
+    // TODO: nếu muốn xóa luôn chi tiêu/thanh toán của nhóm, thêm ở đây
+    // Expense.deleteMany({ <đúng tên field> : conversationId }) và Settlement tương tự.
+    await Conversation.findByIdAndDelete(conversationId);
+
+    let emitter = io.to(conversationId);
+    memberIds.forEach((id) => {
+      emitter = emitter.to(id);
+    });
+    emitter.emit("group-deleted", { conversationId });
+
+    io.in(conversationId).socketsLeave(conversationId);
+
+    return res.status(200).json({ message: "Đã xóa nhóm" });
+  } catch (error) {
+    console.error("Lỗi khi xóa nhóm", error);
     return res.status(500).json({ message: "Lỗi hệ thống" });
   }
 };

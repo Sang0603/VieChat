@@ -344,7 +344,7 @@ export const useChatStore = create<ChatState>()(
             };
           });
         } catch (error) {
-          console.error("Lỗi xảy khi ra add message:", error);
+          console.error("Lỗi xảy ra khi add message:", error);
         }
       },
       updateConversation: (conversation: Partial<Conversation> & { _id: string }) => {
@@ -533,3 +533,20 @@ export const useChatStore = create<ChatState>()(
     }
   )
 );
+
+// 🆕 MỚI THÊM: gỡ hẳn 1 nhóm khỏi state phía máy này (bị kick / nhóm bị xóa).
+// Khác hideConversation: KHÔNG gọi API, chỉ dọn state + cache tin nhắn.
+export const dropConversationLocally = (conversationId: string) => {
+  useChatStore.setState((state) => {
+    const { [conversationId]: _removed, ...restMessages } = state.messages;
+
+    return {
+      conversations: state.conversations.filter((c) => c._id !== conversationId),
+      messages: restMessages,
+      activeConversationId:
+        state.activeConversationId === conversationId
+          ? null
+          : state.activeConversationId,
+    };
+  });
+};

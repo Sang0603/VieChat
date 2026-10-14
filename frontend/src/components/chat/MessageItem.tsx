@@ -4,10 +4,18 @@ import type { Conversation, Message, Participant } from "@/types/chat";
 import UserAvatar from "./UserAvatar";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
-import { PhoneIncoming, PhoneMissed, PhoneOutgoing, Reply, ThumbsUp } from "lucide-react";
+import {
+  PhoneIncoming,
+  PhoneMissed,
+  PhoneOutgoing,
+  Receipt,
+  Reply,
+  ThumbsUp,
+} from "lucide-react";
 import { useStartCall } from "@/hooks/useStartCall";
 import { useChatStore } from "@/stores/useChatStore";
 import { useAuthStore } from "@/stores/useAuthStore";
+import { useExpenseStore } from "@/stores/useExpenseStore"; // 🆕 MỚI THÊM
 
 interface MessageItemProps {
   message: Message;
@@ -47,6 +55,9 @@ function getCallLabel(message: Message, isOwn: boolean) {
     subtitle: callTypeLabel,
   };
 }
+
+// 🆕 MỚI THÊM: định dạng tiền kiểu Việt Nam, ví dụ 19080000 -> "19.080.000đ"
+const formatVnd = (amount: number) => `${amount.toLocaleString("vi-VN")}đ`;
 
 // Nút like nhỏ luôn đứng cố định 1 vị trí (absolute), thanh emoji cũng absolute,
 // chỉ đổi opacity/scale khi bung ra -> không đẩy nút like dịch chuyển.
@@ -140,6 +151,8 @@ const MessageItem = ({
   const setReplyingTo = useChatStore((s) => s.setReplyingTo);
   const toggleReaction = useChatStore((s) => s.toggleReaction);
   const currentUser = useAuthStore((s) => s.user);
+  // 🆕 MỚI THÊM: bấm thẻ khoản chi -> mở bảng Chi tiêu + chi tiết khoản đó
+  const requestOpenExpense = useExpenseStore((s) => s.requestOpen);
 
   const [isMessageHovered, setIsMessageHovered] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
@@ -174,6 +187,8 @@ const MessageItem = ({
   );
 
   const isCallMessage = message.type === "call" && !!message.callInfo;
+  // 🆕 MỚI THÊM
+  const isExpenseMessage = message.type === "expense" && !!message.expenseInfo;
 
   const otherParticipant = selectedConvo.participants.find(
     (p: Participant) => p._id?.toString() !== message.senderId?.toString()
@@ -215,6 +230,65 @@ const MessageItem = ({
   const handleQuickReact = () => {
     toggleReaction(message._id, myReaction ?? DEFAULT_REACTION);
   };
+
+  // 🆕 MỚI THÊM: thẻ thông báo khoản chi, nằm giữa khung chat như một thông báo hệ thống
+  if (isExpenseMessage) {
+    const info = message.expenseInfo!;
+    const isOwn = !!message.isOwn || message.senderId === currentUser?._id;
+    const who = isOwn ? "Bạn" : participant?.displayName ?? "Một thành viên";
+
+    // 🆕 bấm vào thẻ -> mở bảng Chi tiêu và xem chi tiết đúng khoản chi này
+    const handleOpenExpense = () => {
+      requestOpenExpense(selectedConvo._id, info.expenseId);
+    };
+
+    return (
+      <>
+        {isShowTime && (
+          <span className="flex justify-center text-xs text-muted-foreground px-1">
+            {formatMessageTime(new Date(message.createdAt))}
+          </span>
+        )}
+
+        <div className="flex justify-center message-bounce mt-1">
+          <Card
+            role="button"
+            tabIndex={0}
+            aria-label={`Xem chi tiết khoản chi ${info.title}`}
+            onClick={handleOpenExpense}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                handleOpenExpense();
+              }
+            }}
+            className="w-64 space-y-2 p-3 bg-background border cursor-pointer transition-all hover:bg-muted/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <div className="flex items-center gap-2">
+              <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-emerald-500/10">
+                <Receipt className="size-4 text-emerald-500" />
+              </div>
+              <span className="text-xs leading-tight text-muted-foreground">
+                <span className="font-medium text-foreground">{who}</span> đã thêm một khoản chi
+              </span>
+            </div>
+
+            <div className="h-px bg-border" />
+
+            <div className="space-y-0.5">
+              <p className="text-sm font-medium leading-tight break-words">{info.title}</p>
+              <p className="text-base font-semibold text-emerald-600">
+                {formatVnd(info.amount)}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Chia cho {info.participantCount} người
+              </p>
+            </div>
+          </Card>
+        </div>
+      </>
+    );
+  }
 
   if (isCallMessage) {
     const info = message.callInfo!;

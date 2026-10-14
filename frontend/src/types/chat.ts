@@ -53,6 +53,14 @@ export interface CallInfo {
   durationInSeconds: number;
 }
 
+// 🆕 MỚI THÊM: thông tin khoản chi gắn vào tin nhắn type = "expense"
+export interface ExpenseInfo {
+  expenseId: string;
+  title: string;
+  amount: number;
+  participantCount: number;
+}
+
 // bản rút gọn của tin nhắn gốc, dùng để hiển thị preview khi trả lời
 export interface ReplyPreview {
   _id: string;
@@ -81,9 +89,12 @@ export interface Message {
   updatedAt?: string | null;
   createdAt: string;
   isOwn?: boolean;
-  // "text" (mặc định) | "call" (log cuộc gọi, hiện dạng thẻ trong khung chat)
-  type?: "text" | "call";
+  // "text" (mặc định) | "call" (log cuộc gọi) | "expense" (thông báo khoản chi),
+  // hai loại sau hiện dạng thẻ trong khung chat
+  type?: "text" | "call" | "expense";
   callInfo?: CallInfo;
+  // 🆕 chỉ có khi type = "expense"
+  expenseInfo?: ExpenseInfo;
   // tin nhắn đang được trả lời (nếu có)
   replyTo?: ReplyPreview | null;
   // 👇 danh sách reaction hiện có trên tin nhắn
