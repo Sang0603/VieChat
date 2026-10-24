@@ -31,6 +31,10 @@ export const formatOnlineTime = (date: Date) => {
   }
 };
 
+// 🔧 SỬA: nhãn giờ ở giữa khung chat luôn có kèm ngày, giờ đứng trước:
+//   hôm nay  -> "20:50 Hôm nay"
+//   hôm qua  -> "23:46 Hôm qua"
+//   cũ hơn   -> "17:05 26/09/2026"
 export const formatMessageTime = (date: Date) => {
   const now = new Date();
 
@@ -53,14 +57,12 @@ export const formatMessageTime = (date: Date) => {
   });
 
   if (isToday) {
-    return timeStr; // ví dụ: "14:35"
+    return `${timeStr} Hôm nay`; // ví dụ: "06:31 Hôm nay"
   } else if (isYesterday) {
-    return `Hôm qua ${timeStr}`; // ví dụ: "Hôm qua 23:10"
-  } else if (date.getFullYear() === now.getFullYear()) {
-    return `${date.getDate()}/${date.getMonth() + 1} ${timeStr}`; // ví dụ: "22/9 09:15"
+    return `${timeStr} Hôm qua`; // ví dụ: "23:46 Hôm qua"
   } else {
-    return `${date.getDate()}/${
-      date.getMonth() + 1
-    }/${date.getFullYear()} ${timeStr}`; // ví dụ: "15/12/2023 18:40"
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    return `${timeStr} ${day}/${month}/${date.getFullYear()}`; // ví dụ: "17:05 26/09/2026"
   }
 };
