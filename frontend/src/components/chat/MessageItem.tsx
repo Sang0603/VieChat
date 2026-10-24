@@ -28,6 +28,12 @@ interface MessageItemProps {
 const REACTION_EMOJIS = ["👍", "❤️", "😆", "😮", "😢", "😡"];
 const DEFAULT_REACTION = "👍";
 
+// 🆕 MỚI THÊM: nhãn trạng thái tin nhắn bằng tiếng Việt
+const STATUS_LABEL: Record<"delivered" | "seen", string> = {
+  delivered: "Đã nhận",
+  seen: "Đã xem",
+};
+
 function getCallLabel(message: Message, isOwn: boolean) {
   const info = message.callInfo;
   if (!info) return { title: "", subtitle: "" };
@@ -664,7 +670,8 @@ const MessageItem = ({
                   : "bg-muted text-muted-foreground"
               )}
             >
-              {lastMessageStatus}
+              {/* 🔧 SỬA: hiện nhãn tiếng Việt thay vì "delivered" / "seen" */}
+              {STATUS_LABEL[lastMessageStatus]}
             </Badge>
           )}
         </div>

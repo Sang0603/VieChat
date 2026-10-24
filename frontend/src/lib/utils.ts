@@ -15,16 +15,19 @@ export const formatOnlineTime = (date: Date) => {
   const diffMonths = Math.floor(diffDays / 30);
   const diffYears = Math.floor(diffDays / 365);
 
-  if (diffMins < 60) {
-    return `${diffMins}m`; // 5m, 45m
+  // 🔧 SỬA: đổi nhãn viết tắt tiếng Anh (m, h, d, y) sang tiếng Việt
+  if (diffMins < 1) {
+    return "Vừa xong"; // dưới 1 phút (cũng gồm trường hợp đồng hồ máy lệch nhẹ)
+  } else if (diffMins < 60) {
+    return `${diffMins} phút`; // 5 phút, 45 phút
   } else if (diffHours < 24) {
-    return `${diffHours}h`; // 3h, 20h
+    return `${diffHours} giờ`; // 3 giờ, 20 giờ
   } else if (diffDays < 30) {
-    return `${diffDays}d`; // 1d, 12d
+    return `${diffDays} ngày`; // 1 ngày, 12 ngày
   } else if (diffMonths < 12) {
-    return `${diffMonths}m`; // 1m, 2m, 11m
+    return `${diffMonths} tháng`; // 1 tháng, 11 tháng
   } else {
-    return `${diffYears}y`; // 1y, 2y
+    return `${diffYears} năm`; // 1 năm, 2 năm
   }
 };
 
