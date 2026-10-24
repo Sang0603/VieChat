@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { UserPlus, Loader2, Crown, UserMinus, Trash2 } from "lucide-react";
+import { UserPlus, Loader2, Crown, UserMinus, Trash2, LogOut } from "lucide-react"; // 🆕 thêm LogOut
 import { toast } from "sonner";
 import {
   Dialog,
@@ -19,6 +19,7 @@ import { useChatStore, dropConversationLocally } from "@/stores/useChatStore";
 import { useFriendStore } from "@/stores/useFriendStore";
 import { useSocketStore } from "@/stores/useSocketStore";
 import { useAuthStore } from "@/stores/useAuthStore";
+import { useGroupCallStore } from "@/stores/useGroupCallStore"; // 🆕 thoát cuộc gọi nhóm khi rời
 import type { Conversation } from "@/types/chat";
 import type { Friend } from "@/types/user";
 
@@ -40,6 +41,7 @@ const GroupMembersDialog = ({ chat, open, onOpenChange }: GroupMembersDialogProp
   const [submitting, setSubmitting] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null); // 🆕
   const [deleting, setDeleting] = useState(false); // 🆕
+  const [leaving, setLeaving] = useState(false); // 🆕 đang rời nhóm
 
   // 🆕 chỉ chủ nhóm mới được kick / xóa nhóm
   const isOwner = chat.group?.createdBy === user?._id;
@@ -137,6 +139,37 @@ const GroupMembersDialog = ({ chat, open, onOpenChange }: GroupMembersDialogProp
     }
   };
 
+  // 🆕 MỚI THÊM: thành viên tự rời nhóm
+  const handleLeaveGroup = async () => {
+    const isLastMember = chat.participants.length <= 1;
+
+    const confirmText = isLastMember
+      ? "Bạn là người cuối cùng trong nhóm. Rời nhóm sẽ xóa hẳn nhóm này. Tiếp tục?"
+      : isOwner
+      ? "Bạn là chủ nhóm. Khi bạn rời, quyền chủ nhóm sẽ chuyển cho thành viên vào nhóm sớm nhất. Rời nhóm?"
+      : "Rời nhóm này? Bạn sẽ không nhận được tin nhắn của nhóm nữa.";
+
+    if (!window.confirm(confirmText)) return;
+
+    setLeaving(true);
+    try {
+      await chatService.leaveGroup(chat._id);
+
+      // đang trong cuộc gọi nhóm của chính nhóm này -> thoát cuộc gọi luôn
+      const call = useGroupCallStore.getState();
+      if (call.status !== "idle" && call.conversationId === chat._id) {
+        call.endCall();
+      }
+
+      onOpenChange(false);
+      dropConversationLocally(chat._id);
+      toast.success("Đã rời nhóm");
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message ?? "Không thể rời nhóm");
+      setLeaving(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px] border-none">
@@ -219,14 +252,32 @@ const GroupMembersDialog = ({ chat, open, onOpenChange }: GroupMembersDialogProp
               })}
             </div>
 
+            {/* 🆕 rời nhóm: AI CŨNG thấy (kể cả chủ nhóm) */}
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-3 w-full border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={handleLeaveGroup}
+              disabled={leaving || deleting}
+            >
+              {leaving ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <>
+                  <LogOut className="size-4 mr-2" />
+                  Rời nhóm
+                </>
+              )}
+            </Button>
+
             {/* 🆕 xóa nhóm: chỉ chủ nhóm thấy */}
             {isOwner && (
               <Button
                 type="button"
                 variant="destructive"
-                className="mt-3 w-full"
+                className="mt-2 w-full"
                 onClick={handleDeleteGroup}
-                disabled={deleting}
+                disabled={deleting || leaving}
               >
                 {deleting ? (
                   <Loader2 className="size-4 animate-spin" />

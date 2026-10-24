@@ -59,6 +59,17 @@ function getCallLabel(message: Message, isOwn: boolean) {
 // 🆕 MỚI THÊM: định dạng tiền kiểu Việt Nam, ví dụ 19080000 -> "19.080.000đ"
 const formatVnd = (amount: number) => `${amount.toLocaleString("vi-VN")}đ`;
 
+// 🆕 MỚI THÊM: giờ gửi dạng 06:33 (hiện dưới mỗi tin nhắn trong chat nhóm)
+const formatClock = (date: string) =>
+  new Date(date).toLocaleTimeString("vi-VN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+
+// 🆕 MỚI THÊM: escape ký tự đặc biệt trong tên để đưa vào RegExp an toàn
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 // Nút like nhỏ luôn đứng cố định 1 vị trí (absolute), thanh emoji cũng absolute,
 // chỉ đổi opacity/scale khi bung ra -> không đẩy nút like dịch chuyển.
 // Hướng bung của thanh emoji đổi theo isOwn để không bị tràn/cắt icon ở mép khung.
@@ -179,6 +190,9 @@ const MessageItem = ({
 
   const isGroupBreak = isShowTime || message.senderId !== prev?.senderId;
 
+  // 🆕 MỚI THÊM: có phải chat nhóm không
+  const isGroup = selectedConvo.type === "group";
+
   // 🔧 FIX: optional chaining trên p._id và message.senderId — nếu user tương ứng
   // đã bị xóa khỏi DB, backend có thể trả participant thiếu _id; trước đây gọi
   // .toString() trực tiếp gây "Cannot read properties of undefined (reading 'toString')"
@@ -230,6 +244,87 @@ const MessageItem = ({
   const handleQuickReact = () => {
     toggleReaction(message._id, myReaction ?? DEFAULT_REACTION);
   };
+
+  // 🆕 MỚI THÊM: tô xanh các đoạn "@Tên thành viên" trong nội dung (chỉ chat nhóm).
+  // Tên có dấu cách nên so khớp theo danh sách tên thành viên, ưu tiên tên dài trước.
+  const renderContent = (text: string | null | undefined) => {
+    if (!text || !isGroup) return text;
+
+    const names = selectedConvo.participants
+      .map((p: Participant) => p.displayName)
+      .filter(Boolean)
+      .sort((a, b) => b.length - a.length);
+
+    if (names.length === 0) return text;
+
+    const regex = new RegExp(`(@(?:${names.map(escapeRegExp).join("|")}))`, "g");
+
+    return text.split(regex).map((part, i) =>
+      i % 2 === 1 ? (
+        <span
+          key={i}
+          className={cn(
+            "font-medium",
+            message.isOwn ? "underline underline-offset-2" : "text-blue-500"
+          )}
+        >
+          {part}
+        </span>
+      ) : (
+        part
+      )
+    );
+  };
+
+  // 🆕 MỚI THÊM: 3 khối hiển thị trong bubble ở chat nhóm (tên người gửi,
+  // khối trích dẫn, giờ gửi). `edge` là padding ngang thêm cho bubble ảnh/video.
+  // 🔧 SỬA: Card của shadcn mặc định có gap-6 nên các khối bị tách xa nhau ->
+  // ở chat nhóm thêm gap-0 vào Card (xem biến groupCardClass bên dưới).
+  const senderNameEl = (edge = "") =>
+    isGroup && !message.isOwn ? (
+      <p
+        className={cn(
+          "mb-1.5 truncate text-sm leading-none text-muted-foreground",
+          edge
+        )}
+      >
+        {participant?.displayName ?? "Thành viên"}
+      </p>
+    ) : null;
+
+  const quoteEl = (edge = "") =>
+    isGroup && message.replyTo ? (
+      <div
+        className={cn(
+          "mb-2 rounded-md border-l-4 px-3 py-2",
+          message.isOwn
+            ? "border-white/70 bg-black/10"
+            : "border-blue-500 bg-muted/60",
+          edge
+        )}
+      >
+        <p className="text-sm font-semibold leading-snug truncate">
+          {message.replyTo.senderName ?? "Tin nhắn"}
+        </p>
+        <p className="mt-0.5 text-sm leading-snug opacity-70 truncate">
+          {message.replyTo.videoUrl && !message.replyTo.content
+            ? "Đã gửi một video"
+            : message.replyTo.imgUrl && !message.replyTo.content
+            ? "Đã gửi một ảnh"
+            : message.replyTo.content}
+        </p>
+      </div>
+    ) : null;
+
+  const timeEl = (edge = "") =>
+    isGroup ? (
+      <p className={cn("mt-1.5 text-xs leading-none opacity-80", edge)}>
+        {formatClock(message.createdAt)}
+      </p>
+    ) : null;
+
+  // 🆕 MỚI THÊM: class riêng cho bubble ở chat nhóm (bỏ gap-6 mặc định của Card)
+  const groupCardClass = isGroup ? "gap-0" : "";
 
   // 🆕 MỚI THÊM: thẻ thông báo khoản chi, nằm giữa khung chat như một thông báo hệ thống
   if (isExpenseMessage) {
@@ -381,7 +476,9 @@ const MessageItem = ({
 
       <div
         className={cn(
-          "group flex gap-2 message-bounce mt-1 items-center",
+          "group flex gap-2 message-bounce items-center",
+          // 🔧 SỬA: chat nhóm cách các tin nhắn xa hơn cho thoáng
+          isGroup ? "mt-3" : "mt-1",
           message.isOwn ? "justify-end" : "justify-start"
         )}
         onMouseEnter={() => setIsMessageHovered(true)}
@@ -391,7 +488,9 @@ const MessageItem = ({
         }}
       >
         {!message.isOwn && (
-          <div className="w-8 self-end">
+          // 🔧 SỬA: chat nhóm dóng avatar lên ngang tên người gửi (self-start),
+          // chat 1-1 vẫn dóng xuống đáy như cũ (self-end)
+          <div className={cn("w-8", isGroup ? "self-start" : "self-end")}>
             {isGroupBreak && (
               <UserAvatar
                 type="chat"
@@ -432,7 +531,9 @@ const MessageItem = ({
             onMouseLeave={closePickerDelayed}
           />
 
-          {message.replyTo && (
+          {/* Chat 1-1: khối trích dẫn nằm ngoài bubble như cũ.
+              Chat nhóm: khối trích dẫn nằm TRONG bubble (xem quoteEl). */}
+          {!isGroup && message.replyTo && (
             <div
               className={cn(
                 "max-w-full rounded-lg border-l-2 border-primary/60 bg-muted/50 px-2 py-1",
@@ -456,9 +557,12 @@ const MessageItem = ({
             <Card
               className={cn(
                 "p-1 overflow-hidden",
+                groupCardClass,
                 message.isOwn ? "chat-bubble-sent border-0" : "chat-bubble-received"
               )}
             >
+              {senderNameEl("px-2 pt-1.5")}
+              {quoteEl("mx-1")}
               <img
                 src={message.imgUrl}
                 alt="Ảnh đã gửi"
@@ -467,9 +571,10 @@ const MessageItem = ({
               />
               {message.content && (
                 <p className="text-sm leading-relaxed break-words px-2 pt-2 pb-1">
-                  {message.content}
+                  {renderContent(message.content)}
                 </p>
               )}
+              {timeEl("px-2 pb-1")}
             </Card>
           ) : message.videoUrl ? (
             // 👇 MỚI THÊM: render tin nhắn video. preload="metadata" chỉ tải
@@ -479,9 +584,12 @@ const MessageItem = ({
             <Card
               className={cn(
                 "p-1 overflow-hidden",
+                groupCardClass,
                 message.isOwn ? "chat-bubble-sent border-0" : "chat-bubble-received"
               )}
             >
+              {senderNameEl("px-2 pt-1.5")}
+              {quoteEl("mx-1")}
               <video
                 controls
                 poster={message.thumbnailUrl ?? undefined}
@@ -493,18 +601,30 @@ const MessageItem = ({
               </video>
               {message.content && (
                 <p className="text-sm leading-relaxed break-words px-2 pt-2 pb-1">
-                  {message.content}
+                  {renderContent(message.content)}
                 </p>
               )}
+              {timeEl("px-2 pb-1")}
             </Card>
           ) : (
             <Card
               className={cn(
-                "p-3",
+                // 🔧 SỬA: chat nhóm dùng padding px-4 py-3 + gap-0 cho gọn như mẫu
+                isGroup ? "gap-0 px-4 py-3" : "p-3",
                 message.isOwn ? "chat-bubble-sent border-0" : "chat-bubble-received"
               )}
             >
-              <p className="text-sm leading-relaxed break-words">{message.content}</p>
+              {senderNameEl()}
+              {quoteEl()}
+              <p
+                className={cn(
+                  "leading-relaxed break-words",
+                  isGroup ? "text-[15px]" : "text-sm"
+                )}
+              >
+                {renderContent(message.content)}
+              </p>
+              {timeEl()}
             </Card>
           )}
 

@@ -563,3 +563,104 @@ export const deleteGroup = async (req, res) => {
     return res.status(500).json({ message: "Lỗi hệ thống" });
   }
 };
+
+// 🆕 MỚI THÊM: thành viên TỰ RỜI nhóm.
+// - Người cuối cùng rời -> xóa hẳn nhóm
+// - Chủ nhóm rời -> chuyển quyền chủ nhóm cho thành viên vào nhóm sớm nhất
+// - Gỡ luôn dấu vết của người rời trong seenBy / unreadCounts / hiddenFor / clearedFor
+export const leaveGroup = async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const userId = req.user._id.toString();
+
+    if (!mongoose.Types.ObjectId.isValid(conversationId)) {
+      return res.status(400).json({ message: "ID nhóm không hợp lệ" });
+    }
+
+    const conversation = await Conversation.findById(conversationId).lean();
+
+    if (!conversation) {
+      return res.status(404).json({ message: "Không tìm thấy cuộc trò chuyện" });
+    }
+
+    if (conversation.type !== "group") {
+      return res.status(400).json({ message: "Chỉ áp dụng cho nhóm chat" });
+    }
+
+    const isMember = conversation.participants.some(
+      (p) => p.userId.toString() === userId
+    );
+
+    if (!isMember) {
+      return res.status(403).json({ message: "Bạn không ở trong nhóm này" });
+    }
+
+    const remaining = conversation.participants.filter(
+      (p) => p.userId.toString() !== userId
+    );
+
+    // Người cuối cùng rời -> không còn ai nữa, xóa hẳn nhóm
+    if (remaining.length === 0) {
+      await Message.deleteMany({ conversationId });
+      // TODO: nếu muốn xóa luôn chi tiêu/thanh toán của nhóm, thêm ở đây (giống deleteGroup)
+      await Conversation.findByIdAndDelete(conversationId);
+
+      io.in(userId).socketsLeave(conversationId);
+
+      return res.status(200).json({ message: "Đã rời nhóm", deleted: true });
+    }
+
+    // Chủ nhóm rời -> chọn người vào nhóm sớm nhất làm chủ nhóm mới
+    const wasOwner = conversation.group?.createdBy?.toString() === userId;
+    let newOwnerId = null;
+
+    if (wasOwner) {
+      const next = [...remaining].sort(
+        (a, b) => new Date(a.joinedAt).getTime() - new Date(b.joinedAt).getTime()
+      )[0];
+      newOwnerId = next.userId.toString();
+    }
+
+    const update = {
+      $pull: { participants: { userId }, seenBy: userId, hiddenFor: userId },
+      $unset: {
+        [`unreadCounts.${userId}`]: "",
+        [`clearedFor.${userId}`]: "",
+      },
+    };
+
+    if (newOwnerId) {
+      update.$set = { "group.createdBy": newOwnerId };
+    }
+
+    const updated = await Conversation.findByIdAndUpdate(conversationId, update, {
+      new: true,
+    }).populate([{ path: "participants.userId", select: "displayName avatarUrl" }]);
+
+    const participants = (updated.participants || [])
+      .filter((p) => p.userId)
+      .map((p) => ({
+        _id: p.userId._id,
+        displayName: p.userId.displayName,
+        avatarUrl: p.userId.avatarUrl ?? null,
+        joinedAt: p.joinedAt,
+      }));
+
+    // báo cho cả room (gồm cả các tab khác của chính người rời)
+    io.to(conversationId).emit("group-member-left", {
+      conversationId,
+      leftId: userId,
+      leftName: req.user.displayName,
+      participants,
+      newOwnerId, // null nếu chủ nhóm không đổi
+    });
+
+    // người rời không còn nhận tin nhắn nhóm nữa
+    io.in(userId).socketsLeave(conversationId);
+
+    return res.status(200).json({ message: "Đã rời nhóm", deleted: false });
+  } catch (error) {
+    console.error("Lỗi khi rời nhóm", error);
+    return res.status(500).json({ message: "Lỗi hệ thống" });
+  }
+};

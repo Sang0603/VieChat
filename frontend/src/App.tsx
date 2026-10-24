@@ -13,6 +13,8 @@ import { useSocketStore } from "./stores/useSocketStore";
 import { useCallStore } from "./stores/useCallStore"; // 👈 mới thêm
 import CallWindow from "./components/call/CallWindow"; // 👈 mới thêm
 import IncomingCallModal from "./components/call/IncomingCallModal"; // 👈 mới thêm
+import GroupCallManager from "./components/call/GroupCallManager"; // 🆕 gọi nhóm
+import { setupNotificationPermission } from "./lib/notify"; // 🆕 thông báo trên màn hình
 
 function App() {
   const { isDark, setTheme } = useThemeStore();
@@ -30,6 +32,12 @@ function App() {
     }
 
     return () => disconnectSocket();
+  }, [accessToken]);
+
+  // 🆕 MỚI THÊM: đăng nhập xong thì đợi lần bấm chuột đầu tiên để xin quyền thông báo
+  useEffect(() => {
+    if (!accessToken) return;
+    return setupNotificationPermission();
   }, [accessToken]);
 
   // 👇 mới thêm: xử lý khi user bấm Chấp nhận / Từ chối trên IncomingCallModal
@@ -81,6 +89,8 @@ function App() {
       {/* 👇 mới thêm: đặt ngoài cùng để hiện được bất kể đang ở trang nào */}
       <IncomingCallModal onAccept={handleAcceptCall} onReject={handleRejectCall} />
       <CallWindow />
+      {/* 🆕 gọi thoại / video nhóm */}
+      <GroupCallManager />
     </>
   );
 }

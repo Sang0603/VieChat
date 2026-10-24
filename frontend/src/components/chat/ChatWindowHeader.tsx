@@ -14,16 +14,18 @@ import VideoCallButton from "../call/VideoCallButton";
 import FriendProfileDialog from "./FriendProfileDialog";
 import ExpenseSheet from "../expense/ExpenseSheet"; // 👈 MỚI THÊM
 import GroupMembersDialog from "./GroupMembersDialog"; // 🆕 MỚI THÊM
-import { ShieldBan, UserPlus, Loader2, Wallet, Users } from "lucide-react"; // 🆕 thêm Users
+import { ShieldBan, UserPlus, Loader2, Wallet, Users, Phone, Video } from "lucide-react"; // 🆕 thêm Phone, Video
 import { Button } from "../ui/button";
 import { toast } from "sonner";
 import { useStartCall } from "@/hooks/useStartCall"; // 👈 MỚI THÊM
+import { useCallStore } from "@/stores/useCallStore"; // 🆕 gọi nhóm
+import { useGroupCallStore } from "@/stores/useGroupCallStore"; // 🆕 gọi nhóm
 
 const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
   const { conversations, activeConversationId, typingUsers, setActiveConversation } =
     useChatStore();
   const { user } = useAuthStore();
-  const { onlineUsers } = useSocketStore();
+  const { onlineUsers, socket } = useSocketStore(); // 🆕 lấy thêm socket
   const blockedFriendIds = useFriendStore((s) => s.blockedFriendIds);
   const friends = useFriendStore((s) => s.friends);
   const sentList = useFriendStore((s) => s.sentList);
@@ -33,6 +35,12 @@ const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
   const [unblocking, setUnblocking] = useState(false);
   const [expenseOpen, setExpenseOpen] = useState(false); // 👈 MỚI THÊM: bảng chi tiêu của nhóm
   const [membersOpen, setMembersOpen] = useState(false); // 🆕 MỚI THÊM: xem/thêm thành viên nhóm
+
+  // 🆕 MỚI THÊM: trạng thái gọi 1-1 và gọi nhóm (để khoá nút khi đang bận)
+  const callStatus = useCallStore((s) => s.status);
+  const groupCallStatus = useGroupCallStore((s) => s.status);
+  const startGroupCall = useGroupCallStore((s) => s.startCall);
+  const canGroupCall = callStatus === "idle" && groupCallStatus === "idle" && !!socket;
 
   let otherUser: Conversation["participants"][number] | null | undefined;
 
@@ -114,6 +122,16 @@ const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
       },
       "audio"
     );
+  };
+
+  // 🆕 MỚI THÊM: bấm nút gọi thoại / video của nhóm
+  const handleGroupCall = (callType: "audio" | "video") => {
+    if (!chat || !canGroupCall) return;
+    startGroupCall({
+      conversationId: chat._id,
+      callType,
+      groupName: chat.group?.name ?? "",
+    });
   };
 
   // 👇 MỚI THÊM: bấm "Nhắn tin" - đang xem đúng đoạn chat này rồi nên chỉ
@@ -211,6 +229,31 @@ const ChatWindowHeader = ({ chat }: { chat?: Conversation }) => {
                   targetUserAvatar={otherUser.avatarUrl}
                   conversationId={chat._id}
                 />
+              </>
+            )}
+            {/* 🆕 MỚI THÊM: gọi thoại / gọi video nhóm */}
+            {chat.type === "group" && (
+              <>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Gọi thoại nhóm"
+                  title="Gọi thoại nhóm"
+                  disabled={!canGroupCall}
+                  onClick={() => handleGroupCall("audio")}
+                >
+                  <Phone className="size-5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Gọi video nhóm"
+                  title="Gọi video nhóm"
+                  disabled={!canGroupCall}
+                  onClick={() => handleGroupCall("video")}
+                >
+                  <Video className="size-5" />
+                </Button>
               </>
             )}
             {/* 🆕 MỚI THÊM: xem / thêm thành viên nhóm */}

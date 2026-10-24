@@ -7,6 +7,7 @@ import { useChatStore, dropConversationLocally } from "./useChatStore"; // 🆕 
 import { useFriendStore } from "./useFriendStore";
 import { useCallStore } from "./useCallStore";
 import { useExpenseStore } from "./useExpenseStore"; // 👈 MỚI THÊM
+import { notifyIncomingMessage } from "@/lib/notify"; // 🆕 MỚI THÊM: thông báo trên màn hình
 
 const baseURL = import.meta.env.VITE_SOCKET_URL;
 
@@ -53,6 +54,10 @@ export const useSocketStore = create<SocketState>((set, get) => ({
         lastMessage,
         unreadCounts,
       };
+
+      // 🆕 MỚI THÊM: hiện thông báo trên màn hình (gọi TRƯỚC khi markAsSeen/updateConversation
+      // để còn đọc được trạng thái cũ của cuộc trò chuyện)
+      notifyIncomingMessage(message, conversation);
 
       if (useChatStore.getState().activeConversationId === message.conversationId) {
         useChatStore.getState().markAsSeen();
@@ -108,6 +113,37 @@ export const useSocketStore = create<SocketState>((set, get) => ({
         participants,
       });
     });
+
+    // 🆕 MỚI THÊM: có thành viên tự rời nhóm.
+    // - Chính người rời (kể cả ở tab khác): gỡ nhóm khỏi sidebar, không báo gì thêm
+    // - Thành viên còn lại: cập nhật danh sách thành viên + chủ nhóm mới (nếu có)
+    socket.on(
+      "group-member-left",
+      ({ conversationId, leftId, leftName, participants, newOwnerId }) => {
+        const me = useAuthStore.getState().user?._id;
+
+        if (leftId === me) {
+          dropConversationLocally(conversationId);
+          return;
+        }
+
+        const chatState = useChatStore.getState();
+        const convo = chatState.conversations.find((c) => c._id === conversationId);
+
+        chatState.updateConversation({
+          _id: conversationId,
+          participants,
+          ...(newOwnerId && convo?.group
+            ? { group: { ...convo.group, createdBy: newOwnerId } }
+            : {}),
+        });
+
+        // chỉ hiện thông báo nếu đang mở đúng nhóm đó, tránh làm phiền khi ở nhóm khác
+        if (chatState.activeConversationId === conversationId) {
+          toast.info(`${leftName ?? "Một thành viên"} đã rời nhóm`);
+        }
+      }
+    );
 
     // 🆕 MỚI THÊM: chủ nhóm xóa nhóm -> gỡ nhóm khỏi sidebar của mọi thành viên
     socket.on("group-deleted", ({ conversationId }) => {

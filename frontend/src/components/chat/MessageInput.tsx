@@ -10,6 +10,7 @@ import { useSocketStore } from "@/stores/useSocketStore";
 import { useFriendStore } from "@/stores/useFriendStore";
 import { chatService } from "@/services/chatService";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils"; // 🆕 MỚI THÊM
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,6 +21,15 @@ import {
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB, khớp với giới hạn backend
 const MAX_VIDEO_SIZE = 300 * 1024 * 1024; // 300MB, khớp với giới hạn backend
 const TYPING_STOP_DELAY = 2000; // ms - sau 2s ngừng gõ thì coi như đã ngừng "đang nhập"
+
+// 🆕 MỚI THÊM: bỏ dấu + lowercase để tìm thành viên khi gõ @ không dấu vẫn ra
+const normalizeText = (s: string) =>
+  s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .toLowerCase();
 
 const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
   const { user } = useAuthStore();
@@ -36,6 +46,11 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
   const [videoPreview, setVideoPreview] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [sending, setSending] = useState(false);
+
+  // 🆕 MỚI THÊM: trạng thái gợi ý @mention trong chat nhóm
+  // mentionQuery = null -> không đang gõ @; còn lại là phần chữ sau dấu @
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionIndex, setMentionIndex] = useState(0);
 
   // 👇 MỚI THÊM: 2 input riêng biệt (ẩn), mỗi cái accept đúng 1 loại,
   // để hệ điều hành hiện picker rõ ràng đúng loại - không gộp mập mờ nữa
@@ -56,6 +71,12 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedConvo._id]);
 
+  // 🆕 MỚI THÊM: đổi cuộc trò chuyện thì đóng gợi ý @
+  useEffect(() => {
+    setMentionQuery(null);
+    setMentionIndex(0);
+  }, [selectedConvo._id]);
+
   const otherUser =
     selectedConvo.type === "direct"
       ? selectedConvo.participants.find((p) => p._id !== user?._id)
@@ -73,6 +94,29 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
   const isBlockedByMe = Boolean(otherUser && blockedFriendIds.includes(otherUser._id));
   const isBlockedByOther = Boolean(otherUser && blockedMeIds.includes(otherUser._id));
   const isBlocked = isBlockedByMe || isBlockedByOther;
+
+  // 🆕 MỚI THÊM: danh sách thành viên khớp với chữ đang gõ sau dấu @ (tối đa 5)
+  const isGroup = selectedConvo.type === "group";
+  const mentionCandidates =
+    isGroup && mentionQuery !== null
+      ? selectedConvo.participants
+          .filter(
+            (p) =>
+              p._id !== user._id &&
+              normalizeText(p.displayName).includes(normalizeText(mentionQuery))
+          )
+          .slice(0, 5)
+      : [];
+  const mentionOpen = mentionCandidates.length > 0;
+
+  // 🆕 MỚI THÊM: chọn 1 thành viên -> thay "@chữ-đang-gõ" ở cuối bằng "@Tên "
+  const selectMention = (displayName: string) => {
+    setValue((prev) =>
+      prev.replace(/(^|\s)@([^\s@]*)$/, (_m, pre: string) => `${pre}@${displayName} `)
+    );
+    setMentionQuery(null);
+    setMentionIndex(0);
+  };
 
   const handleTypingSignal = () => {
     if (!isTypingRef.current) {
@@ -175,6 +219,7 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
     const currReplyTo = replyingTo;
 
     setValue("");
+    setMentionQuery(null); // 🆕 MỚI THÊM
     clearImage();
     clearVideo();
     clearReplyingTo();
@@ -258,13 +303,45 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
       e.preventDefault();
+      // 🆕 MỚI THÊM: đang mở gợi ý @ thì Enter = chọn thành viên, không gửi tin
+      if (mentionOpen) {
+        const picked = mentionCandidates[mentionIndex] ?? mentionCandidates[0];
+        if (picked) selectMention(picked.displayName);
+        return;
+      }
       sendMessage();
     }
   };
 
+  // 🆕 MỚI THÊM: ↑ ↓ để chọn trong danh sách gợi ý, Esc để đóng
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!mentionOpen) return;
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setMentionIndex((i) => (i + 1) % mentionCandidates.length);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setMentionIndex(
+        (i) => (i - 1 + mentionCandidates.length) % mentionCandidates.length
+      );
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setMentionQuery(null);
+    }
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setValue(e.target.value);
+    const next = e.target.value;
+    setValue(next);
     handleTypingSignal();
+
+    // 🆕 MỚI THÊM: chat nhóm - nếu cuối ô nhập là "@chữ" thì mở gợi ý thành viên
+    if (isGroup) {
+      const match = next.match(/(?:^|\s)@([^\s@]*)$/);
+      setMentionQuery(match ? match[1] : null);
+      setMentionIndex(0);
+    }
   };
 
   if (isBlockedByMe) {
@@ -402,13 +479,39 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
         </DropdownMenu>
 
         <div className="flex-1 relative">
+          {/* 🆕 MỚI THÊM: danh sách gợi ý thành viên khi gõ @ (chỉ chat nhóm).
+              onMouseDown + preventDefault để bấm vào gợi ý không làm ô nhập mất focus. */}
+          {mentionOpen && (
+            <div className="absolute bottom-full left-0 z-30 mb-2 max-h-56 w-64 overflow-y-auto rounded-lg border bg-background p-1 shadow-md">
+              {mentionCandidates.map((p, i) => (
+                <button
+                  key={p._id}
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    selectMention(p.displayName);
+                  }}
+                  className={cn(
+                    "w-full truncate rounded-md px-3 py-1.5 text-left text-sm hover:bg-muted",
+                    i === mentionIndex && "bg-muted"
+                  )}
+                >
+                  {p.displayName}
+                </button>
+              ))}
+            </div>
+          )}
+
           <Input
             onKeyPress={handleKeyPress}
+            onKeyDown={handleKeyDown}
             value={value}
             onChange={handleChange}
             placeholder={
               uploadProgress !== null
                 ? `Đang tải video lên... ${uploadProgress}%`
+                : isGroup
+                ? "Soạn tin nhắn... (gõ @ để nhắc thành viên)"
                 : "Soạn tin nhắn..."
             }
             disabled={sending}
@@ -423,7 +526,10 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
             >
               <div>
                 <EmojiPicker
-                  onChange={(emoji: string) => setValue(`${value}${emoji}`)}
+                  onChange={(emoji: string) => {
+                    setValue(`${value}${emoji}`);
+                    setMentionQuery(null);
+                  }}
                 />
               </div>
             </Button>

@@ -8,6 +8,7 @@ import {
   addGroupMembers,
   removeGroupMember, // 🆕
   deleteGroup, // 🆕
+  leaveGroup, // 🆕 rời nhóm
 } from "../controllers/conversationController.js";
 import {
   getExpenses,
@@ -37,6 +38,9 @@ router.post("/:conversationId/members", checkFriendship, addGroupMembers);
 // 🆕 MỚI THÊM: chủ nhóm kick thành viên / xóa hẳn nhóm
 router.delete("/:conversationId/members/:memberId", removeGroupMember);
 router.delete("/:conversationId/group", deleteGroup);
+
+// 🆕 MỚI THÊM: thành viên tự rời nhóm
+router.post("/:conversationId/leave", leaveGroup);
 
 // 👇 MỚI THÊM: chi tiêu chung của nhóm (chia tiền + VietQR)
 router.get("/:conversationId/expenses", getExpenses);

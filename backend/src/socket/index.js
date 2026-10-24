@@ -4,6 +4,7 @@ import express from "express";
 import { socketAuthMiddleware } from "../middlewares/socketMiddleware.js";
 import { getUserConversationsForSocketIO } from "../controllers/conversationController.js";
 import { registerCallHandlers } from "./callSocketHandlers.js";
+import { registerGroupCallHandlers } from "./groupCallSocketHandlers.js"; // 🆕
 
 const app = express();
 
@@ -47,6 +48,7 @@ io.on("connection", async (socket) => {
   socket.join(userId);
 
   registerCallHandlers(io, socket, onlineUsers);
+  registerGroupCallHandlers(io, socket, onlineUsers); // 🆕
 
   // ==================== TYPING INDICATOR ====================
   socket.on("typing:start", ({ conversationId }) => {

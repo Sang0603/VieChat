@@ -161,4 +161,10 @@ export const chatService = {
     const res = await api.delete(`/conversations/${conversationId}/group`);
     return res.data;
   },
+
+  // 🆕 MỚI THÊM: thành viên tự rời nhóm
+  async leaveGroup(conversationId: string) {
+    const res = await api.post(`/conversations/${conversationId}/leave`);
+    return res.data;
+  },
 };
