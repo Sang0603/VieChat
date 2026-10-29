@@ -24,14 +24,20 @@ export const refreshLimiter = rateLimit({
   skipSuccessfulRequests: true, // chỉ đếm các lần refresh THẤT BẠI (token không hợp lệ) - refresh thành công không tính vào quota
 });
 
-// key theo IP + username -> chỉ chặn riêng tài khoản đang bị brute-force,
+// key theo IP + tài khoản -> chỉ chặn riêng tài khoản đang bị brute-force,
 // không ảnh hưởng tài khoản khác đăng nhập từ cùng IP (mạng công ty, NAT,...)
+// 🔧 SỬA: form đăng nhập gửi trường "email" (không phải "username") nên trước
+// đây key luôn là "<ip>:unknown" -> mọi tài khoản cùng IP dùng chung bộ đếm.
+// Giờ ưu tiên "email", vẫn chấp nhận "username" để không vỡ client cũ.
 const signInKeyGenerator = (req) => {
-  const username =
-    typeof req.body?.username === "string"
-      ? req.body.username.toLowerCase().trim()
-      : "unknown";
-  return `${req.ip}:${username}`;
+  const raw =
+    typeof req.body?.email === "string"
+      ? req.body.email
+      : typeof req.body?.username === "string"
+      ? req.body.username
+      : "";
+  const account = raw.toLowerCase().trim() || "unknown";
+  return `${req.ip}:${account}`;
 };
 
 // Tầng 1: sai quá 5 lần trong 5 phút -> khoá 5 phút

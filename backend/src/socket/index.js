@@ -1,8 +1,10 @@
 import { Server } from "socket.io";
 import http from "http";
 import express from "express";
+import mongoose from "mongoose"; // 🆕 để kiểm tra ObjectId hợp lệ
 import { socketAuthMiddleware } from "../middlewares/socketMiddleware.js";
 import { getUserConversationsForSocketIO } from "../controllers/conversationController.js";
+import Conversation from "../models/Conversation.js"; // 🆕 kiểm tra thành viên khi join phòng
 import { registerCallHandlers } from "./callSocketHandlers.js";
 import { registerGroupCallHandlers } from "./groupCallSocketHandlers.js"; // 🆕
 
@@ -41,8 +43,23 @@ io.on("connection", async (socket) => {
     socket.join(id);
   });
 
-  socket.on("join-conversation", (conversationId) => {
-    socket.join(conversationId);
+  // 🔧 SỬA: trước đây ai cũng join được phòng của bất kỳ cuộc trò chuyện nào
+  // chỉ cần biết id -> nghe lén được tin nhắn. Giờ phải là thành viên.
+  socket.on("join-conversation", async (conversationId) => {
+    try {
+      if (!mongoose.isValidObjectId(conversationId)) return;
+
+      const isMember = await Conversation.exists({
+        _id: conversationId,
+        "participants.userId": user._id,
+      });
+
+      if (isMember) {
+        socket.join(conversationId.toString());
+      }
+    } catch (error) {
+      console.error("Lỗi khi join-conversation:", error.message);
+    }
   });
 
   socket.join(userId);
@@ -51,8 +68,9 @@ io.on("connection", async (socket) => {
   registerGroupCallHandlers(io, socket, onlineUsers); // 🆕
 
   // ==================== TYPING INDICATOR ====================
-  socket.on("typing:start", ({ conversationId }) => {
-    if (!conversationId) return;
+  // 🔧 SỬA: chỉ cho phát "đang nhập" vào phòng mà socket này đã là thành viên
+  socket.on("typing:start", ({ conversationId } = {}) => {
+    if (!conversationId || !socket.rooms.has(String(conversationId))) return;
 
     socket.to(conversationId).emit("typing:start", {
       conversationId,
@@ -61,8 +79,8 @@ io.on("connection", async (socket) => {
     });
   });
 
-  socket.on("typing:stop", ({ conversationId }) => {
-    if (!conversationId) return;
+  socket.on("typing:stop", ({ conversationId } = {}) => {
+    if (!conversationId || !socket.rooms.has(String(conversationId))) return;
 
     socket.to(conversationId).emit("typing:stop", {
       conversationId,

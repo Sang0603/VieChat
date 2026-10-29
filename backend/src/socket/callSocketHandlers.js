@@ -18,6 +18,7 @@
 // io.on("connection", (socket) => { ... }) — xem hướng dẫn tích hợp
 // ở cuối file.
 
+import mongoose from "mongoose";
 import CallLog from "../models/CallLog.js";
 import Message from "../models/Message.js";
 import Conversation from "../models/Conversation.js";
@@ -30,6 +31,8 @@ import {
 // Lưu trạng thái các cuộc gọi đang diễn ra trong bộ nhớ (RAM)
 // key: callId, value: { callerId, calleeId, conversationId, callType, startedAt }
 const activeCalls = new Map();
+
+const ALLOWED_CALL_TYPES = ["audio", "video"];
 
 function makeCallId(userIdA, userIdB) {
   return [userIdA, userIdB].sort().join(":");
@@ -62,6 +65,26 @@ async function isBlockedBetween(userIdA, userIdB) {
   });
   return Boolean(blocked);
 }
+
+// 🆕 conversationId phải là chat 1-1 (direct) và có đủ cả 2 người
+async function isDirectConversationOf(conversationId, userIdA, userIdB) {
+  if (!mongoose.isValidObjectId(conversationId)) return false;
+
+  const conversation = await Conversation.findById(conversationId).select(
+    "type participants"
+  );
+  if (!conversation || conversation.type !== "direct") return false;
+
+  const ids = conversation.participants.map((p) => p.userId.toString());
+  return ids.includes(userIdA) && ids.includes(userIdB);
+}
+
+// 🆕 helper kiểm tra quyền trong cuộc gọi
+const isCaller = (call, userId) => call.callerId === userId;
+const isCallee = (call, userId) => call.calleeId === userId;
+const isParty = (call, userId) => isCaller(call, userId) || isCallee(call, userId);
+const otherPartyOf = (call, userId) =>
+  isCaller(call, userId) ? call.calleeId : call.callerId;
 
 /**
  * @param {import("socket.io").Server} io
@@ -119,7 +142,24 @@ export function registerCallHandlers(io, socket, userSocketMap) {
   }
 
   // ---- 1. NGƯỜI GỌI mời cuộc gọi ----
-  socket.on("call:invite", async ({ toUserId, conversationId, callType = "audio", fromUser }) => {
+  // 🔧 SỬA: không còn nhận "fromUser" từ client (có thể bị giả mạo) - tự dựng
+  // từ socket.user đã được xác thực. Có đủ cả displayName và fullName để
+  // giao diện cũ/mới đều hiển thị được.
+  socket.on("call:invite", async ({ toUserId, conversationId, callType = "audio" } = {}) => {
+    // 🆕 kiểm tra đầu vào + quyền: gọi cho chính mình / id sai / hội thoại không
+    // phải chat 1-1 của hai người -> bỏ qua, không làm gì cả
+    if (
+      !mongoose.isValidObjectId(toUserId) ||
+      toUserId === currentUserId ||
+      !ALLOWED_CALL_TYPES.includes(callType)
+    ) {
+      return;
+    }
+
+    if (!(await isDirectConversationOf(conversationId, currentUserId, toUserId))) {
+      return;
+    }
+
     // 🔒 Nếu 2 người đang chặn nhau: báo y hệt trường hợp "người nhận
     // không online" -> người gọi không biết mình đang bị chặn.
     // Trường hợp này KHÔNG lưu lại log/tin nhắn cuộc gọi nhỡ, vì 2 bên
@@ -173,7 +213,12 @@ export function registerCallHandlers(io, socket, userSocketMap) {
 
     io.to(targetSocketId).emit("call:incoming", {
       callId,
-      fromUser, // { _id, fullName, avatarUrl } - gửi kèm từ client để hiển thị popup
+      fromUser: {
+        _id: currentUserId,
+        displayName: socket.user.displayName,
+        fullName: socket.user.displayName, // giữ tương thích với tên trường cũ
+        avatarUrl: socket.user.avatarUrl,
+      },
       callType,
       conversationId,
     });
@@ -182,9 +227,10 @@ export function registerCallHandlers(io, socket, userSocketMap) {
   });
 
   // ---- 2. NGƯỜI NHẬN đồng ý ----
-  socket.on("call:accept", ({ callId }) => {
+  socket.on("call:accept", ({ callId } = {}) => {
     const call = activeCalls.get(callId);
-    if (!call) return;
+    // 🔧 SỬA: chỉ NGƯỜI NHẬN của cuộc gọi này mới được accept (và chỉ 1 lần)
+    if (!call || !isCallee(call, currentUserId) || call.startedAt) return;
 
     call.startedAt = new Date();
 
@@ -195,84 +241,96 @@ export function registerCallHandlers(io, socket, userSocketMap) {
   });
 
   // ---- 3. NGƯỜI NHẬN từ chối / đang bận ----
-  socket.on("call:reject", async ({ callId, reason = "rejected" }) => {
+  socket.on("call:reject", async ({ callId, reason = "rejected" } = {}) => {
     const call = activeCalls.get(callId);
-    if (!call) return;
+    // 🔧 SỬA: chỉ NGƯỜI NHẬN mới được từ chối
+    if (!call || !isCallee(call, currentUserId)) return;
 
     const callerSocketId = userSocketMap.get(call.callerId);
     if (callerSocketId) {
       io.to(callerSocketId).emit("call:rejected", { callId, reason });
     }
 
+    activeCalls.delete(callId); // xoá trước để tránh xử lý trùng khi bấm nhiều lần
     await finalizeCall(call, "rejected");
-    activeCalls.delete(callId);
   });
 
   // ---- 4. Trao đổi SDP offer/answer (WebRTC) ----
-  socket.on("call:offer", ({ callId, toUserId, sdp }) => {
-    const targetSocketId = userSocketMap.get(toUserId);
+  // 🔧 SỬA: chỉ người thuộc cuộc gọi mới relay được, và luôn gửi cho ĐỐI PHƯƠNG
+  // trong cuộc gọi (không tin toUserId do client gửi lên).
+  socket.on("call:offer", ({ callId, sdp } = {}) => {
+    const call = activeCalls.get(callId);
+    if (!call || !isParty(call, currentUserId)) return;
+
+    const targetSocketId = userSocketMap.get(otherPartyOf(call, currentUserId));
     if (targetSocketId) {
       io.to(targetSocketId).emit("call:offer", { callId, sdp, fromUserId: currentUserId });
     }
   });
 
-  socket.on("call:answer", ({ callId, toUserId, sdp }) => {
-    const targetSocketId = userSocketMap.get(toUserId);
+  socket.on("call:answer", ({ callId, sdp } = {}) => {
+    const call = activeCalls.get(callId);
+    if (!call || !isParty(call, currentUserId)) return;
+
+    const targetSocketId = userSocketMap.get(otherPartyOf(call, currentUserId));
     if (targetSocketId) {
       io.to(targetSocketId).emit("call:answer", { callId, sdp });
     }
   });
 
   // ---- 5. Trao đổi ICE candidate ----
-  socket.on("call:ice-candidate", ({ callId, toUserId, candidate }) => {
-    const targetSocketId = userSocketMap.get(toUserId);
+  socket.on("call:ice-candidate", ({ callId, candidate } = {}) => {
+    const call = activeCalls.get(callId);
+    if (!call || !isParty(call, currentUserId)) return;
+
+    const targetSocketId = userSocketMap.get(otherPartyOf(call, currentUserId));
     if (targetSocketId) {
       io.to(targetSocketId).emit("call:ice-candidate", { callId, candidate });
     }
   });
 
   // ---- 6. Một trong hai bên cúp máy ----
-  socket.on("call:end", async ({ callId }) => {
+  socket.on("call:end", async ({ callId } = {}) => {
     const call = activeCalls.get(callId);
-    if (!call) return;
+    // 🔧 SỬA: chỉ người trong cuộc gọi mới được cúp máy
+    if (!call || !isParty(call, currentUserId)) return;
 
-    const otherUserId = call.callerId === currentUserId ? call.calleeId : call.callerId;
-    const otherSocketId = userSocketMap.get(otherUserId);
+    const otherSocketId = userSocketMap.get(otherPartyOf(call, currentUserId));
     if (otherSocketId) {
       io.to(otherSocketId).emit("call:ended", { callId });
     }
 
     const status = call.startedAt ? "completed" : "cancelled";
-    await finalizeCall(call, status);
     activeCalls.delete(callId);
+    await finalizeCall(call, status);
   });
 
   // ---- 7. Người gọi tự huỷ trước khi được nhấc máy (không ai bắt máy / huỷ giữa chừng) ----
-  socket.on("call:cancel", async ({ callId }) => {
+  socket.on("call:cancel", async ({ callId } = {}) => {
     const call = activeCalls.get(callId);
-    if (!call) return;
+    // 🔧 SỬA: chỉ NGƯỜI GỌI mới được huỷ
+    if (!call || !isCaller(call, currentUserId)) return;
 
     const calleeSocketId = userSocketMap.get(call.calleeId);
     if (calleeSocketId) {
       io.to(calleeSocketId).emit("call:cancelled", { callId });
     }
 
-    await finalizeCall(call, "missed");
     activeCalls.delete(callId);
+    await finalizeCall(call, "missed");
   });
 
   // ---- 8. Nếu user rớt mạng/disconnect giữa cuộc gọi -> tự động kết thúc cuộc gọi liên quan ----
   socket.on("disconnect", async () => {
     for (const [callId, call] of activeCalls.entries()) {
-      if (call.callerId === currentUserId || call.calleeId === currentUserId) {
-        const otherUserId = call.callerId === currentUserId ? call.calleeId : call.callerId;
-        const otherSocketId = userSocketMap.get(otherUserId);
+      if (isParty(call, currentUserId)) {
+        const otherSocketId = userSocketMap.get(otherPartyOf(call, currentUserId));
         if (otherSocketId) {
           io.to(otherSocketId).emit("call:ended", { callId, reason: "peer_disconnected" });
         }
         const status = call.startedAt ? "completed" : "missed";
-        await finalizeCall(call, status);
         activeCalls.delete(callId);
+        await finalizeCall(call, status);
       }
     }
   });

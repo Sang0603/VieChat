@@ -21,7 +21,7 @@ export const uploadChatImage = async (req, res) => {
     }
 
     const result = await uploadImageFromBuffer(file.buffer, {
-      folder: "Moji_chat/messages",
+      folder: "viechat/messages/images",
       transformation: [{ width: 1280, crop: "limit" }],
     });
 

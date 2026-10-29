@@ -112,8 +112,10 @@ const conversationSchema = new mongoose.Schema(
   }
 );
 
+// 🔧 SỬA: trước đây viết "participant.userId" (thiếu chữ s) nên chỉ mục này
+// không bao giờ khớp với trường thật; getConversations phải quét toàn bộ.
 conversationSchema.index({
-  "participant.userId": 1,
+  "participants.userId": 1,
   lastMessageAt: -1,
 });
 

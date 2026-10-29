@@ -1,8 +1,26 @@
 import mongoose from "mongoose";
 import Conversation from "../models/Conversation.js";
 import Message from "../models/Message.js";
+import Expense from "../models/Expense.js"; // 🆕 để dọn dữ liệu khi xóa nhóm
+import Settlement from "../models/Settlement.js"; // 🆕
+import CallLog from "../models/CallLog.js"; // 🆕
 import User from "../models/User.js"; // 🆕 MỚI THÊM
 import { io } from "../socket/index.js";
+
+const MAX_MESSAGES_PER_PAGE = 100; // 🆕 giới hạn tối đa 1 lần tải tin nhắn
+const DEFAULT_MESSAGES_PER_PAGE = 50;
+
+// 🆕 Xóa toàn bộ dữ liệu gắn với 1 conversation (dùng khi xóa nhóm / người
+// cuối cùng rời nhóm) để không để lại tin nhắn, khoản chi, khoản trả nợ và
+// lịch sử cuộc gọi mồ côi trong database.
+const deleteConversationData = async (conversationId) => {
+  await Promise.all([
+    Message.deleteMany({ conversationId }),
+    Expense.deleteMany({ conversationId }),
+    Settlement.deleteMany({ conversationId }),
+    CallLog.deleteMany({ conversationId }),
+  ]);
+};
 
 export const createConversation = async (req, res) => {
   try {
@@ -19,6 +37,11 @@ export const createConversation = async (req, res) => {
       return res
         .status(400)
         .json({ message: "Tên nhóm và danh sách thành viên là bắt buộc" });
+    }
+
+    // 🆕 id sai định dạng -> 400 thay vì lỗi 500 (CastError)
+    if (!memberIds.every((id) => mongoose.Types.ObjectId.isValid(id))) {
+      return res.status(400).json({ message: "Danh sách thành viên không hợp lệ" });
     }
 
     let conversation;
@@ -160,8 +183,30 @@ export const getConversations = async (req, res) => {
 export const getMessages = async (req, res) => {
   try {
     const { conversationId } = req.params;
-    const { limit = 50, cursor } = req.query;
+    const { cursor } = req.query;
     const userId = req.user._id;
+
+    // 🆕 id sai định dạng -> 400 thay vì lỗi 500 (CastError)
+    if (!mongoose.Types.ObjectId.isValid(conversationId)) {
+      return res.status(400).json({ message: "ID cuộc trò chuyện không hợp lệ" });
+    }
+
+    // 🔧 SỬA: giới hạn số tin nhắn mỗi lần tải (1..100) để không ai có thể
+    // gọi limit=999999 kéo cả lịch sử chat về một lần.
+    const parsedLimit = parseInt(req.query.limit, 10);
+    const limit = Math.min(
+      Math.max(Number.isNaN(parsedLimit) ? DEFAULT_MESSAGES_PER_PAGE : parsedLimit, 1),
+      MAX_MESSAGES_PER_PAGE
+    );
+
+    // 🆕 cursor phải là ngày hợp lệ, nếu không -> 400
+    let cursorDate = null;
+    if (cursor) {
+      cursorDate = new Date(cursor);
+      if (Number.isNaN(cursorDate.getTime())) {
+        return res.status(400).json({ message: "Cursor không hợp lệ" });
+      }
+    }
 
     const conversation = await Conversation.findById(conversationId).lean();
 
@@ -188,21 +233,21 @@ export const getMessages = async (req, res) => {
     // conversation.clearedFor là Map nên khi .lean() nó sẽ là plain object.
     const clearedAt = conversation.clearedFor?.[userId.toString()];
 
-    if (cursor && clearedAt) {
-      query.createdAt = { $lt: new Date(cursor), $gt: new Date(clearedAt) };
-    } else if (cursor) {
-      query.createdAt = { $lt: new Date(cursor) };
+    if (cursorDate && clearedAt) {
+      query.createdAt = { $lt: cursorDate, $gt: new Date(clearedAt) };
+    } else if (cursorDate) {
+      query.createdAt = { $lt: cursorDate };
     } else if (clearedAt) {
       query.createdAt = { $gt: new Date(clearedAt) };
     }
 
     let messages = await Message.find(query)
       .sort({ createdAt: -1 })
-      .limit(Number(limit) + 1);
+      .limit(limit + 1);
 
     let nextCursor = null;
 
-    if (messages.length > Number(limit)) {
+    if (messages.length > limit) {
       const nextMessage = messages[messages.length - 1];
       nextCursor = nextMessage.createdAt.toISOString();
       messages.pop();
@@ -544,9 +589,9 @@ export const deleteGroup = async (req, res) => {
 
     const memberIds = conversation.participants.map((p) => p.userId.toString());
 
-    await Message.deleteMany({ conversationId });
-    // TODO: nếu muốn xóa luôn chi tiêu/thanh toán của nhóm, thêm ở đây
-    // Expense.deleteMany({ <đúng tên field> : conversationId }) và Settlement tương tự.
+    // 🔧 SỬA: xóa luôn khoản chi, khoản trả nợ và lịch sử cuộc gọi của nhóm
+    // (trước đây chỉ xóa tin nhắn nên các dữ liệu này bị bỏ lại mồ côi)
+    await deleteConversationData(conversationId);
     await Conversation.findByIdAndDelete(conversationId);
 
     let emitter = io.to(conversationId);
@@ -601,8 +646,8 @@ export const leaveGroup = async (req, res) => {
 
     // Người cuối cùng rời -> không còn ai nữa, xóa hẳn nhóm
     if (remaining.length === 0) {
-      await Message.deleteMany({ conversationId });
-      // TODO: nếu muốn xóa luôn chi tiêu/thanh toán của nhóm, thêm ở đây (giống deleteGroup)
+      // 🔧 SỬA: dọn luôn khoản chi, khoản trả nợ, lịch sử cuộc gọi (giống deleteGroup)
+      await deleteConversationData(conversationId);
       await Conversation.findByIdAndDelete(conversationId);
 
       io.in(userId).socketsLeave(conversationId);

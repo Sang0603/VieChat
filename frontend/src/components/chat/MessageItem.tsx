@@ -428,7 +428,7 @@ const MessageItem = ({
               {isGroupBreak && (
                 <UserAvatar
                   type="chat"
-                  name={participant?.displayName ?? "Moji"}
+                  name={participant?.displayName ?? "VieChat"}
                   avatarUrl={participant?.avatarUrl ?? undefined}
                 />
               )}
@@ -500,7 +500,7 @@ const MessageItem = ({
             {isGroupBreak && (
               <UserAvatar
                 type="chat"
-                name={participant?.displayName ?? "Moji"}
+                name={participant?.displayName ?? "VieChat"}
                 avatarUrl={participant?.avatarUrl ?? undefined}
               />
             )}

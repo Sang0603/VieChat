@@ -34,17 +34,35 @@ function onRefreshed(token: string | null) {
   refreshSubscribers = [];
 }
 
+// 🆕 Lỗi có phải do ACCESS TOKEN không hợp lệ/hết hạn hay không.
+// Backend hiện trả 403 "Access token hết hạn hoặc không đúng" (và 401 khi
+// thiếu token). Các 403 khác (không đủ quyền, bị chặn người lạ, không phải
+// chủ nhóm...) KHÔNG liên quan tới token nên không được đi vào luồng refresh.
+function isTokenError(error: any): boolean {
+  const status = error.response?.status;
+  if (status === 401) return true;
+  if (status !== 403) return false;
+
+  const message = String(error.response?.data?.message ?? "").toLowerCase();
+  return message.includes("token");
+}
+
 // tự động gọi refresh api khi access token hết hạn
 api.interceptors.response.use(
   (res) => res,
   async (error) => {
     const originalRequest = error.config;
 
+    // 🆕 lỗi mạng/timeout: không có config hoặc response -> không có gì để retry
+    if (!originalRequest) {
+      return Promise.reject(error);
+    }
+
     // những api không cần check
     if (
-      originalRequest.url.includes("/auth/signin") ||
-      originalRequest.url.includes("/auth/signup") ||
-      originalRequest.url.includes("/auth/refresh")
+      originalRequest.url?.includes("/auth/signin") ||
+      originalRequest.url?.includes("/auth/signup") ||
+      originalRequest.url?.includes("/auth/refresh")
     ) {
       return Promise.reject(error);
     }
@@ -57,7 +75,8 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    if (error.response?.status === 403 && !originalRequest._retry) {
+    // 🔧 SỬA: chỉ refresh khi thật sự là lỗi token (xem isTokenError ở trên)
+    if (isTokenError(error) && !originalRequest._retry) {
       originalRequest._retry = true;
 
       // 👇 nếu đã có 1 request khác đang refresh rồi, không gọi
@@ -78,7 +97,8 @@ api.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const res = await api.post("/auth/refresh", { withCredentials: true });
+        // 🔧 SỬA: instance đã bật withCredentials sẵn, không cần truyền vào body
+        const res = await api.post("/auth/refresh");
         const newAccessToken = res.data.accessToken;
 
         useAuthStore.getState().setAccessToken(newAccessToken);

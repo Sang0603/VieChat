@@ -11,6 +11,17 @@ const BANK_ID_REGEX = /^\d{6}$/;
 const BANK_ACCOUNT_REGEX = /^\d{6,19}$/;
 const MAX_ACCOUNT_NAME_LENGTH = 50;
 
+// 🆕 giới hạn cho hồ sơ cá nhân (bio khớp maxlength 500 trong model User)
+const MAX_DISPLAY_NAME_LENGTH = 50;
+const MAX_PHONE_LENGTH = 20;
+const MAX_BIO_LENGTH = 500;
+const ALLOWED_GENDERS = ["Nam", "Nữ", "Khác"];
+
+// 🆕 Lỗi do dữ liệu người dùng gửi sai (validate/cast của Mongoose) -> trả 400
+// thay vì 500 "Lỗi hệ thống".
+const isClientDataError = (error) =>
+  error?.name === "ValidationError" || error?.name === "CastError";
+
 const toBankInfo = (bankInfo) =>
   bankInfo?.bankId
     ? {
@@ -250,6 +261,14 @@ export const changePassword = async (req, res) => {
       return res.status(404).json({ message: "Không tìm thấy người dùng" });
     }
 
+    // 🔧 SỬA: tài khoản đăng nhập bằng Google không có mật khẩu -> trước đây
+    // bcrypt.compare(…, undefined) ném lỗi và trả 500 "Lỗi hệ thống".
+    if (!user.hashedPassword) {
+      return res.status(400).json({
+        message: "Tài khoản này đăng nhập bằng Google nên chưa có mật khẩu để đổi",
+      });
+    }
+
     // 🔧 SỬA: mật khẩu mới theo luật chung (8-64 ký tự, không quá phổ biến,
     // không trùng tài khoản) thay cho "tối thiểu 6 ký tự" trước đây
     const passwordError = getPasswordError(newPassword, user.email);
@@ -279,23 +298,70 @@ export const updateProfile = async (req, res) => {
     const { displayName, phone, bio, gender, dateOfBirth } = req.body;
 
     const updateData = {};
-    if (displayName !== undefined) updateData.displayName = displayName;
-    if (phone !== undefined) updateData.phone = phone;
-    if (bio !== undefined) updateData.bio = bio;
-    if (gender !== undefined) updateData.gender = gender;
+
+    // 🔧 SỬA: kiểm tra đầu vào trước khi ghi DB -> trả 400 thay vì 500
+    if (displayName !== undefined) {
+      if (typeof displayName !== "string") {
+        return res.status(400).json({ message: "Tên hiển thị không hợp lệ" });
+      }
+      const cleanName = displayName.trim().replace(/\s+/g, " ");
+      if (!cleanName || cleanName.length > MAX_DISPLAY_NAME_LENGTH) {
+        return res.status(400).json({
+          message: `Tên hiển thị phải từ 1 đến ${MAX_DISPLAY_NAME_LENGTH} ký tự`,
+        });
+      }
+      updateData.displayName = cleanName;
+    }
+
+    if (phone !== undefined) {
+      if (typeof phone !== "string" || phone.trim().length > MAX_PHONE_LENGTH) {
+        return res.status(400).json({ message: "Số điện thoại không hợp lệ" });
+      }
+      updateData.phone = phone.trim();
+    }
+
+    if (bio !== undefined) {
+      if (typeof bio !== "string" || bio.length > MAX_BIO_LENGTH) {
+        return res.status(400).json({
+          message: `Giới thiệu không được quá ${MAX_BIO_LENGTH} ký tự`,
+        });
+      }
+      updateData.bio = bio;
+    }
+
+    if (gender !== undefined) {
+      // cho phép bỏ trống ("" hoặc null) để xóa giới tính
+      if (gender === "" || gender === null) {
+        updateData.gender = null;
+      } else if (ALLOWED_GENDERS.includes(gender)) {
+        updateData.gender = gender;
+      } else {
+        return res.status(400).json({ message: "Giới tính không hợp lệ" });
+      }
+    }
+
     if (dateOfBirth !== undefined) {
       // dateOfBirth từ frontend gửi dạng "yyyy-mm-dd" (input type="date")
-      updateData.dateOfBirth = dateOfBirth ? new Date(dateOfBirth) : null;
+      if (!dateOfBirth) {
+        updateData.dateOfBirth = null;
+      } else {
+        const parsed = new Date(dateOfBirth);
+        if (Number.isNaN(parsed.getTime())) {
+          return res.status(400).json({ message: "Ngày sinh không hợp lệ" });
+        }
+        updateData.dateOfBirth = parsed;
+      }
     }
 
     if (Object.keys(updateData).length === 0) {
       return res.status(400).json({ message: "Không có dữ liệu để cập nhật" });
     }
 
+    // 🔧 SỬA: loại hashedPassword khỏi dữ liệu trả về client
     const updatedUser = await User.findByIdAndUpdate(userId, updateData, {
       new: true,
       runValidators: true,
-    });
+    }).select("-hashedPassword");
 
     if (!updatedUser) {
       return res.status(404).json({ message: "Không tìm thấy người dùng" });
@@ -303,6 +369,9 @@ export const updateProfile = async (req, res) => {
 
     return res.status(200).json({ user: updatedUser });
   } catch (error) {
+    if (isClientDataError(error)) {
+      return res.status(400).json({ message: "Dữ liệu đầu vào không hợp lệ" });
+    }
     console.error("Lỗi xảy ra khi updateProfile", error);
     return res.status(500).json({ message: "Lỗi hệ thống" });
   }
@@ -313,6 +382,14 @@ export const updatePrivacy = async (req, res) => {
     const userId = req.user._id;
     // 👇 MỚI THÊM: blockStrangerMessages
     const { showPhone, showDateOfBirth, blockStrangerMessages } = req.body;
+
+    // 🆕 các cờ riêng tư phải là boolean
+    const flags = { showPhone, showDateOfBirth, blockStrangerMessages };
+    for (const [key, value] of Object.entries(flags)) {
+      if (value !== undefined && typeof value !== "boolean") {
+        return res.status(400).json({ message: `Giá trị ${key} không hợp lệ` });
+      }
+    }
 
     const updateData = {};
     if (showPhone !== undefined) updateData["privacy.showPhone"] = showPhone;
@@ -325,10 +402,11 @@ export const updatePrivacy = async (req, res) => {
       return res.status(400).json({ message: "Không có dữ liệu để cập nhật" });
     }
 
+    // 🔧 SỬA: loại hashedPassword khỏi dữ liệu trả về client
     const updatedUser = await User.findByIdAndUpdate(userId, updateData, {
       new: true,
       runValidators: true,
-    });
+    }).select("-hashedPassword");
 
     if (!updatedUser) {
       return res.status(404).json({ message: "Không tìm thấy người dùng" });
@@ -336,6 +414,9 @@ export const updatePrivacy = async (req, res) => {
 
     return res.status(200).json({ user: updatedUser });
   } catch (error) {
+    if (isClientDataError(error)) {
+      return res.status(400).json({ message: "Dữ liệu đầu vào không hợp lệ" });
+    }
     console.error("Lỗi xảy ra khi updatePrivacy", error);
     return res.status(500).json({ message: "Lỗi hệ thống" });
   }
